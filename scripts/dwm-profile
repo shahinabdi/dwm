@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# dwm-profile — profile picture and display name shown in the quickshell sidebar.
+#
+#   dwm-profile            menu (click the avatar in the sidebar)
+#   dwm-profile avatar     pick a picture (thumbnails from ~/Pictures and ~/Downloads, or type a path)
+#   dwm-profile avatar F   use image file F
+#   dwm-profile name       set the display name (empty = automatic from your account)
+#   dwm-profile reset      remove picture and custom name
+#
+# Picture: ~/.face (standard location, also used by login screens)
+# Name:    ~/.config/dwm-profile.conf   (NAME="…")
+
+FACE="$HOME/.face"
+CONF="$HOME/.config/dwm-profile.conf"
+NAME=""
+[ -r "$CONF" ] && . "$CONF"
+
+note() { notify-send -t 2000 -h string:x-dunst-stack-tag:dwm-profile ${FACE_ICON:+-i "$FACE_ICON"} "$@" 2>/dev/null; }
+
+auto_name() {
+	local n
+	n=$(getent passwd "$USER" | cut -d: -f5 | cut -d, -f1)
+	n=${n:-$USER}
+	# capitalise every word
+	sed -E 's/(^|[[:space:]])([[:alpha:]])/\1\u\2/g' <<<"$n"
+}
+
+set_avatar() {
+	local f=$1
+	f=${f/#\~/$HOME}
+	[ -f "$f" ] || { note -u critical "Profile" "Not a file: $f"; return 1; }
+	file -b --mime-type "$f" | grep -q '^image/' || { note -u critical "Profile" "Not an image: $f"; return 1; }
+	cp -f "$f" "$FACE" && chmod 644 "$FACE"
+	FACE_ICON=$FACE note "Profile" "Picture updated"
+}
+
+pick_avatar() {
+	local list choice
+	# images (newest first) with thumbnails as rofi icons
+	list=$(find "$HOME/Pictures" "$HOME/Downloads" -maxdepth 3 -type f -not -path '*/.*' \
+		\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.svg' \) \
+		-printf '%T@\t%p\n' 2>/dev/null | sort -rn | cut -f2 | head -200)
+	choice=$( {
+		printf 'Type a path…\0icon\x1ffolder\n'
+		while IFS= read -r p; do
+			[ -n "$p" ] && printf '%s\0icon\x1f%s\n' "${p/#$HOME/\~}" "$p"
+		done <<<"$list"
+	} | rofi -dmenu -i -show-icons -p "󰀉 picture" \
+		-theme-str 'element-icon { size: 48px; } listview { lines: 6; }' ) || return 0
+	if [[ $choice == "Type a path…" ]]; then
+		choice=$(rofi -dmenu -p "image path" -mesg "Full path to an image, e.g. ~/Pictures/me.png" </dev/null) || return 0
+	fi
+	[ -n "$choice" ] && set_avatar "$choice"
+}
+
+set_name() {
+	local n
+	n=$(printf '%s\n' "${NAME:-$(auto_name)}" | rofi -dmenu -p "display name" \
+		-mesg "Name shown in the sidebar (empty = automatic: $(auto_name))") || return 0
+	n=$(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' <<<"$n")
+	[ "$n" = "$(auto_name)" ] && n=""
+	printf 'NAME=%q\n' "$n" > "$CONF"
+	note "Profile" "Name: ${n:-$(auto_name) (automatic)}"
+}
+
+reset() {
+	rm -f "$FACE" "$CONF"
+	note "Profile" "Picture and name reset"
+}
+
+menu() {
+	local c
+	c=$(printf '%s\n' \
+		"󰀉  Change picture" \
+		"󰏫  Change name  (${NAME:-$(auto_name)})" \
+		"󰆴  Remove picture" \
+		"󰑓  Reset name" |
+		rofi -dmenu -i -p "󰀄 profile" -format i) || exit 0
+	case $c in
+		0) pick_avatar ;;
+		1) set_name ;;
+		2) rm -f "$FACE"; note "Profile" "Picture removed" ;;
+		3) rm -f "$CONF"; note "Profile" "Name: $(auto_name) (automatic)" ;;
+	esac
+}
+
+case $1 in
+	avatar) if [ -n "$2" ]; then set_avatar "$2"; else pick_avatar; fi ;;
+	name)   set_name ;;
+	reset)  reset ;;
+	get)    echo "name=${NAME:-$(auto_name)}"; [ -f "$FACE" ] && echo "face=$FACE"; true ;;
+	menu|"") menu ;;
+	*) sed -n '2,11p' "$0" >&2; exit 1 ;;
+esac

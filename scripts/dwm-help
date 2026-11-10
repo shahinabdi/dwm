@@ -11,6 +11,7 @@ Mod + n|Wi-Fi menu
 Mod + v|Clipboard history
 Mod + Shift + v|Clear clipboard history
 Mod + a|Quick settings sidebar (Wi-Fi, Bluetooth, sound, brightness)
+Sidebar avatar / name|Click: change profile picture / display name (dwm-profile)
 Mod + Shift + h|This help (also Mod + Fn + F1)
 #Windows
 Mod + j  /  Mod + l|Focus next window
