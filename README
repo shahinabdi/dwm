@@ -5,7 +5,9 @@ dwm is an extremely fast, small, and dynamic window manager for X.
 
 Requirements
 ------------
-In order to build dwm you need the Xlib header files.
+In order to build dwm you need the Xlib header files. The included
+.xinitrc also starts picom with VSync to prevent screen tearing, so
+picom must be installed when using this startup file.
 
 
 Installation
