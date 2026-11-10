@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# dwm-shot — screenshot manager for dwm-btw (X11: maim + xclip, flameshot for annotating).
+# Every shot is saved to ~/Pictures/Screenshots and copied to the clipboard.
+#
+#   dwm-shot full      whole screen               (Print)
+#   dwm-shot region    select an area / click win  (Mod+Shift+s)
+#   dwm-shot window    focused window              (Shift+Print)
+#   dwm-shot annotate  flameshot editor            (Ctrl+Print)
+#   dwm-shot menu      rofi menu with everything   (Mod+Print)
+
+DIR="$HOME/Pictures/Screenshots"
+mkdir -p "$DIR"
+FILE="$DIR/$(date +'%Y-%m-%d_%H-%M-%S').png"
+
+# selection colours match the dwm theme (col_steel #69a7ff)
+SEL=(-s -u -b 2 -c 0.41,0.65,1.0,0.9)
+
+done_shot() {
+	[ -s "$FILE" ] || { rm -f "$FILE"; exit 1; }   # cancelled
+	xclip -selection clipboard -t image/png -i "$FILE"
+	# notification with buttons (runs in background, waits for a click)
+	(
+		act=$(notify-send -i "$FILE" -A open=Open -A folder="Show in folder" -A delete=Delete \
+			"Screenshot saved" "${FILE/#$HOME/\~}  (copied to clipboard)")
+		case $act in
+			open)   xdg-open "$FILE" ;;
+			folder) thunar --select "$FILE" 2>/dev/null || xdg-open "$DIR" ;;
+			delete) rm -f "$FILE"; notify-send -t 1500 "Screenshot deleted" ;;
+		esac
+	) >/dev/null 2>&1 &
+}
+
+shot() {
+	case $1 in
+		full)     maim -u "$FILE" ;;
+		region)   maim "${SEL[@]}" "$FILE" 2>/dev/null ;;
+		window)   maim -u -i "$(xdotool getactivewindow)" "$FILE" ;;
+		delay)    notify-send -t 4500 "Screenshot" "Full screen in 5 seconds…"; maim -u -d 5 "$FILE" ;;
+		annotate) exec flameshot gui --path "$DIR" --clipboard ;;
+		folder)   exec xdg-open "$DIR" ;;
+		*)        echo "usage: dwm-shot {full|region|window|delay|annotate|folder|menu}" >&2; exit 1 ;;
+	esac
+	done_shot
+}
+
+if [ "$1" = menu ]; then
+	choice=$(printf '%s\n' \
+		"󰩭  Region / window (click or drag)" \
+		"󰍹  Full screen" \
+		"󱂬  Focused window" \
+		"󰔛  Full screen in 5 s" \
+		"󰏫  Annotate (flameshot)" \
+		"󰉋  Open screenshots folder" |
+		rofi -dmenu -i -p "󰄀 screenshot" -format i) || exit 0
+	modes=(region full window delay annotate folder)
+	sleep 0.2   # let rofi disappear before capturing
+	shot "${modes[$choice]}"
+else
+	shot "$1"
+fi

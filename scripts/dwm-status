@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# dwm-status — status bar for dwm (dwm's bar is NOT waybar; waybar is Wayland-only).
+# Each block is wrapped in a raw marker byte (\x01..\x07) so the statuscmd
+# patch knows which block was clicked; dwm-statusclick handles the clicks.
+# Refresh instantly with:  dwm-ctl refresh   (sends SIGUSR1)
+
+PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/dwm-status.pid"
+echo $$ > "$PIDFILE"
+
+SEP="  "
+
+kb() {
+	local l g
+	IFS=, read -ra l <<<"$(setxkbmap -query 2>/dev/null | awk '/^layout/{print $2}')"
+	g=$(xkb-group 2>/dev/null)
+	printf '\x01\U000F030C %s\x01' "${l[${g:-0}]:-?}"
+}
+
+net() {
+	local type state conn q icon
+	while IFS=: read -r type state conn; do
+		[ "$state" = connected ] || continue
+		if [ "$type" = ethernet ]; then
+			printf '\x02\U000F0200 %s\x02' "$conn"; return
+		elif [ "$type" = wifi ]; then
+			q=$(awk 'NR==3{print int($3*100/70)}' /proc/net/wireless)
+			q=${q:-0}
+			if   [ "$q" -ge 75 ]; then icon=$'\U000F0928'
+			elif [ "$q" -ge 50 ]; then icon=$'\U000F0925'
+			elif [ "$q" -ge 25 ]; then icon=$'\U000F0922'
+			else                       icon=$'\U000F091F'; fi
+			printf '\x02%s %s\x02' "$icon" "$conn"; return
+		fi
+	done < <(nmcli -t -f TYPE,STATE,CONNECTION device 2>/dev/null)
+	printf '\x02\U000F092E off\x02'
+}
+
+vol() {
+	local out v icon
+	out=$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null) || { printf '\x03\U000F075F n/a\x03'; return; }
+	v=$(awk '{printf "%d", $2*100 + 0.5}' <<<"$out")
+	if [[ $out == *MUTED* ]]; then printf '\x03\U000F075F mute\x03'; return; fi
+	if   [ "$v" -ge 60 ]; then icon=$'\U000F057E'
+	elif [ "$v" -ge 25 ]; then icon=$'\U000F0580'
+	else                       icon=$'\U000F057F'; fi
+	printf '\x03%s %s%%\x03' "$icon" "$v"
+}
+
+mic() {
+	local out v
+	out=$(wpctl get-volume @DEFAULT_AUDIO_SOURCE@ 2>/dev/null) || { printf '\x04\U000F036D n/a\x04'; return; }
+	if [[ $out == *MUTED* ]]; then printf '\x04\U000F036D off\x04'; return; fi
+	v=$(awk '{printf "%d", $2*100 + 0.5}' <<<"$out")
+	printf '\x04\U000F036C %s%%\x04' "$v"
+}
+
+bright() {
+	local d=/sys/class/backlight/amdgpu_bl1 b m
+	[ -r "$d/brightness" ] || return
+	b=$(<"$d/brightness"); m=$(<"$d/max_brightness")
+	printf '\x05\U000F00DF %s%%\x05' "$((b * 100 / m))"
+}
+
+bat() {
+	local d=/sys/class/power_supply/BAT1 c s icon
+	[ -r "$d/capacity" ] || return
+	c=$(<"$d/capacity"); s=$(<"$d/status")
+	local icons=($'\U000F008E' $'\U000F007A' $'\U000F007B' $'\U000F007C' $'\U000F007D' \
+	             $'\U000F007E' $'\U000F007F' $'\U000F0080' $'\U000F0081' $'\U000F0082' $'\U000F0079')
+	icon=${icons[$((c / 10))]}
+	case $s in
+		Charging) icon=$'\U000F0084' ;;
+		Full|"Not charging") icon=$'\U000F06A5' ;;
+	esac
+	printf '\x06%s %s%%\x06' "$icon" "$c"
+	# low battery warning (once per drop below 15%)
+	if [ "$s" = Discharging ] && [ "$c" -le 15 ] && [ -z "$warned" ]; then
+		notify-send -u critical "Battery low" "${c}% remaining"; warned=1
+	elif [ "$c" -gt 15 ]; then warned=; fi
+}
+
+clk() {
+	printf '\x07\U000F00ED %s  \U000F0150 %s\x07' "$(date '+%a %d %b')" "$(date '+%H:%M')"
+}
+
+update() {
+	xsetroot -name " $(kb)$SEP$(net)$SEP$(vol)$SEP$(mic)$SEP$(bright)$SEP$(bat)$SEP$(clk) "
+}
+
+trap 'update' USR1
+trap 'rm -f "$PIDFILE"; exit' TERM INT
+
+while :; do
+	update
+	sleep 5 & wait $!
+done

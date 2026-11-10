@@ -48,3 +48,24 @@ Configuration
 -------------
 The configuration of dwm is done by creating a custom config.h
 and (re)compiling the source code.
+
+
+Local setup (dwm-btw)
+---------------------
+Patches: statuscmd (hand-ported to 6.8) — clickable status blocks.
+Status bar: scripts/dwm-status (started from .xinitrc), clicks go to
+scripts/dwm-statusclick, actions in scripts/dwm-ctl. Scripts are
+symlinked into ~/.local/bin.
+
+Bar blocks:   keyboard | network | volume | brightness | battery | date
+  keyboard    click: reset layout to fr          (also Mod+Shift+k)
+  network     left: wifi menu (rofi), right: nmtui (also Mod+n)
+  volume      left: mute, right: pavucontrol, scroll: volume
+  brightness  scroll: brightness
+  battery     click: details
+  date        left: calendar
+Media keys (volume/mute/mic/brightness) work out of the box.
+Mod+F1 (or `dwm-help` in a terminal) shows all keybindings — scripts/dwm-help.
+
+Keyboard layout is set system-wide with `sudo localectl set-x11-keymap fr`
+(/etc/X11/xorg.conf.d/00-keyboard.conf) so reconnected keyboards stay fr.

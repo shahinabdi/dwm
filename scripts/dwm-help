@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# dwm-help — keybinding cheat sheet for dwm-btw.
+# Mod+Shift+h (or Mod+F1) shows it in rofi (type to filter); run `dwm-help` in a terminal to print it.
+# Keep in sync with config.h when you change bindings.
+
+KEYS='
+#Apps
+Mod + Return|Terminal (kitty)
+Mod + d|App launcher (rofi)
+Mod + n|Wi-Fi menu
+Mod + v|Clipboard history
+Mod + Shift + v|Clear clipboard history
+Mod + a|Quick settings sidebar (Wi-Fi, Bluetooth, sound, brightness)
+Mod + Shift + h|This help (also Mod + Fn + F1)
+#Windows
+Mod + j  /  Mod + l|Focus next window
+Mod + k  /  Mod + h|Focus previous window
+Mod + z|Swap focused window with master
+Mod + q|Close window
+Mod + Shift + Space|Toggle floating
+Mod + Left / Right|Shrink / grow master area
+Mod + i  /  Mod + u|More / fewer windows in master
+#Layouts
+Mod + t|Tiled  []=
+Mod + f  /  Mod + m|Monocle (fullscreen-ish)  [M]
+Mod + Ctrl + Space|Switch to previous layout
+Mod + b|Show / hide bar
+#Tags (workspaces)
+Mod + & é " '"'"' ( - è _ ç à|Go to tag 1 … 10
+Mod + Shift + & … à|Move window to tag 1 … 10
+Mod + Ctrl + & … à|Also show tag (toggle)
+Mod + Ctrl + Shift + & … à|Also put window on tag (toggle)
+Mod + s|Show all tags
+Mod + Ctrl + s|Put window on all tags
+Mod + Tab|Previous tag
+#Screenshots (saved to ~/Pictures/Screenshots + clipboard)
+Mod + Shift + s|Region (drag) or window (click)
+Print|Full screen
+Shift + Print|Focused window
+Ctrl + Print|Annotate (flameshot)
+Mod + Print|Screenshot menu (delay, folder…)
+#Monitors
+Mod + ,  /  Mod + ;|Focus previous / next monitor
+Mod + Shift + ,  /  ;|Move window to previous / next monitor
+#System
+Volume keys|Volume up / down / mute
+Mic-mute key|Mute microphone (noise-cancelling mic is default)
+Brightness keys|Brightness up / down
+Mod + Space|Switch keyboard layout (fr ⇄ ir Persian)
+Mod + Shift + k|Reset keyboard layouts (back to fr)
+Mod + Shift + x|Lock screen
+Mod + Shift + e|Suspend
+Mod + Shift + q|Quit dwm (logout)
+#Mouse
+Mod + Left drag|Move window
+Mod + Right drag|Resize window
+Mod + Middle click|Toggle floating
+Click tag|View tag  (right click: also show tag)
+Mod + click tag|Move window to tag
+#Status bar clicks
+Keyboard  󰌌|Left: switch fr ⇄ ir   Right: reset
+Network  󰤨|Left: Wi-Fi menu   Right: nmtui
+Volume  󰕾|Left: mute   Right: mixer   Scroll: volume
+Microphone  󰍬|Left: mute   Right: input devices   Scroll: mic volume
+Brightness  󰃟|Scroll: brightness
+Battery  󰁹|Click: details
+Date  󰃭|Left: calendar
+'
+
+pad() { local s=$1; printf '%s%*s' "$s" $((34 - ${#s})) ''; }  # pads by characters, not bytes
+
+# dwm passes on the startx tty, so "-t 1" alone is not enough: use rofi when dwm launched us
+if [ -t 1 ] && [ "$(ps -o comm= -p "$PPID")" != dwm ]; then
+	# terminal output
+	while IFS='|' read -r key desc; do
+		[ -z "$key" ] && continue
+		if [[ $key == \#* ]]; then
+			printf '\n\e[1;34m%s\e[0m\n' "${key#\#}"
+		else
+			printf '  \e[1m%s\e[0m %s\n' "$(pad "$key")" "$desc"
+		fi
+	done <<<"$KEYS"
+	echo
+	exit
+fi
+
+# rofi output (Pango markup)
+esc() { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' <<<"$1"; }
+while IFS='|' read -r key desc; do
+	[ -z "$key" ] && continue
+	if [[ $key == \#* ]]; then
+		printf '<span foreground="#69a7ff" weight="bold">── %s ──</span>\n' "$(esc "${key#\#}")"
+	else
+		printf '<b>%s</b>  <span foreground="#7d90ab">%s</span>\n' \
+			"$(esc "$(pad "$key")")" "$(esc "$desc")"
+	fi
+done <<<"$KEYS" |
+	rofi -dmenu -i -markup-rows -no-custom -p "󰌌 keys" \
+		-theme-str 'window { width: 760px; } listview { lines: 18; } element-text { font: "JetBrainsMono Nerd Font Mono 11"; }' \
+		>/dev/null

@@ -61,7 +61,7 @@ enum { CurNormal, CurResize, CurMove, CurLast }; /* cursor */
 enum { SchemeNorm, SchemeSel }; /* color schemes */
 enum { NetSupported, NetWMName, NetWMState, NetWMCheck,
        NetWMFullscreen, NetActiveWindow, NetWMWindowType,
-       NetWMWindowTypeDialog, NetClientList, NetLast }; /* EWMH atoms */
+       NetWMWindowTypeDialog, NetWMWindowTypeDock, NetClientList, NetLast }; /* EWMH atoms */
 enum { WMProtocols, WMDelete, WMState, WMTakeFocus, WMLast }; /* default atoms */
 enum { ClkTagBar, ClkLtSymbol, ClkStatusText, ClkWinTitle,
        ClkClientWin, ClkRootWin, ClkLast }; /* clicks */
@@ -232,10 +232,15 @@ static int xerror(Display *dpy, XErrorEvent *ee);
 static int xerrordummy(Display *dpy, XErrorEvent *ee);
 static int xerrorstart(Display *dpy, XErrorEvent *ee);
 static void zoom(const Arg *arg);
+static void statusclick(const Arg *arg);
+static int statustextwidth(const char *text);
 
 /* variables */
 static const char broken[] = "broken";
 static char stext[256];
+static int statusw;           /* width of status text incl. padding */
+static int statusblock;       /* clicked status block id (statuscmd) */
+static int statusbutton;      /* mouse button used on status text */
 static int screen;
 static int sw, sh;           /* X display screen geometry width, height */
 static int bh;               /* bar height */
@@ -440,8 +445,28 @@ buttonpress(XEvent *e)
 			arg.ui = 1 << i;
 		} else if (ev->x < x + TEXTW(selmon->ltsymbol))
 			click = ClkLtSymbol;
-		else if (ev->x > selmon->ww - (int)TEXTW(stext) + lrpad - 2)
+		else if (ev->x > selmon->ww - statusw) {
+			/* statuscmd: find which block (marker byte 1..31) was clicked */
+			char *text, *s, ch;
+			int cur = 0, sx = selmon->ww - statusw;
+
 			click = ClkStatusText;
+			statusblock = 0;
+			statusbutton = ev->button;
+			for (text = s = stext; *s && sx <= ev->x; s++) {
+				if ((unsigned char)*s >= ' ')
+					continue;
+				ch = *s;
+				*s = '\0';
+				sx += statustextwidth(text);
+				*s = ch;
+				text = s + 1;
+				if (sx > ev->x)
+					break;
+				cur = (cur == ch) ? 0 : ch;
+			}
+			statusblock = cur;
+		}
 		else
 			click = ClkWinTitle;
 	} else if ((c = wintoclient(ev->window))) {
@@ -712,8 +737,25 @@ drawbar(Monitor *m)
 	/* draw status first so it can be overdrawn by tags later */
 	if (m == selmon) { /* status is only drawn on selected monitor */
 		drw_setscheme(drw, scheme[SchemeNorm]);
-		tw = TEXTW(stext) - lrpad + 2; /* 2px right padding */
-		drw_text(drw, m->ww - tw, 0, tw, bh, 0, stext, 0);
+		char *text, *s, ch;
+		int sx;
+
+		tw = statusw;
+		sx = m->ww - tw;
+		drw_rect(drw, sx, 0, tw, bh, 1, 1);
+		for (text = s = stext; *s; s++) {
+			if ((unsigned char)*s < ' ') {
+				ch = *s;
+				*s = '\0';
+				w = statustextwidth(text);
+				drw_text(drw, sx, 0, w, bh, 0, text, 0);
+				sx += w;
+				*s = ch;
+				text = s + 1;
+			}
+		}
+		w = statustextwidth(text);
+		drw_text(drw, sx, 0, w, bh, 0, text, 0);
 	}
 
 	for (c = m->clients; c; c = c->next) {
@@ -1581,6 +1623,7 @@ setup(void)
 	netatom[NetWMFullscreen] = XInternAtom(dpy, "_NET_WM_STATE_FULLSCREEN", False);
 	netatom[NetWMWindowType] = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
 	netatom[NetWMWindowTypeDialog] = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_DIALOG", False);
+	netatom[NetWMWindowTypeDock] = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_DOCK", False);
 	netatom[NetClientList] = XInternAtom(dpy, "_NET_CLIENT_LIST", False);
 	/* init cursors */
 	cursor[CurNormal] = drw_cur_create(drw, XC_left_ptr);
@@ -2017,7 +2060,43 @@ updatestatus(void)
 {
 	if (!gettextprop(root, XA_WM_NAME, stext, sizeof(stext)))
 		strcpy(stext, "dwm-"VERSION);
+	{
+		char *text, *s, ch;
+
+		statusw = 0;
+		for (text = s = stext; *s; s++) {
+			if ((unsigned char)*s < ' ') {
+				ch = *s;
+				*s = '\0';
+				statusw += statustextwidth(text);
+				*s = ch;
+				text = s + 1;
+			}
+		}
+		statusw += statustextwidth(text) + 2; /* 2px right padding */
+	}
 	drawbar(selmon);
+}
+
+int
+statustextwidth(const char *text)
+{
+	return *text ? (int)drw_fontset_getwidth(drw, text) : 0;
+}
+
+void
+statusclick(const Arg *arg)
+{
+	char block[4], button[4];
+	const char *cmd[] = { statusclickcmd, block, NULL };
+
+	if (!statusblock)
+		return;
+	snprintf(block, sizeof(block), "%d", statusblock);
+	snprintf(button, sizeof(button), "%d", statusbutton);
+	setenv("BUTTON", button, 1);
+	spawn(&(Arg){ .v = cmd });
+	unsetenv("BUTTON");
 }
 
 void
@@ -2039,6 +2118,13 @@ updatewindowtype(Client *c)
 		setfullscreen(c, 1);
 	if (wtype == netatom[NetWMWindowTypeDialog])
 		c->isfloating = 1;
+	if (wtype == netatom[NetWMWindowTypeDock]) {
+		/* panels (e.g. the quickshell sidebar): float borderless at their own geometry */
+		XWindowChanges wc = { .border_width = 0 };
+		c->isfloating = 1;
+		c->bw = 0;
+		XConfigureWindow(dpy, c->win, CWBorderWidth, &wc);
+	}
 }
 
 void

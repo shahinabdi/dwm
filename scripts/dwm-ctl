@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# dwm-ctl — actions bound to keys / bar clicks in dwm.
+
+refresh() {
+	local pf="${XDG_RUNTIME_DIR:-/tmp}/dwm-status.pid"
+	[ -r "$pf" ] && kill -USR1 "$(cat "$pf")" 2>/dev/null
+}
+
+osd() { # short notification that replaces itself
+	notify-send -t 1200 -h string:x-dunst-stack-tag:dwm-osd -h "int:value:$2" "$1" 2>/dev/null
+}
+
+vol_pct() { wpctl get-volume @DEFAULT_AUDIO_SINK@ | awk '{printf "%d", $2*100 + 0.5}'; }
+mic_pct() { wpctl get-volume @DEFAULT_AUDIO_SOURCE@ | awk '{printf "%d", $2*100 + 0.5}'; }
+
+net_menu() {
+	local -a ssids=() rows=()
+	local inuse sig sec ssid idx pass
+	notify-send -t 1500 "Wi-Fi" "Scanning…" 2>/dev/null
+	while IFS=$'\t' read -r inuse sig sec ssid; do
+		ssids+=("$ssid")
+		rows+=("$(printf '%s %3s%%  %s  (%s)' "$([ "$inuse" = '*' ] && echo '󰄬' || echo ' ')" "$sig" "$ssid" "${sec:-open}")")
+	done < <(nmcli -t -e no -f IN-USE,SIGNAL,SECURITY,SSID device wifi list --rescan yes 2>/dev/null |
+		awk -F: '{ssid=$4; for (i=5;i<=NF;i++) ssid=ssid ":" $i}
+		         ssid != "" && !seen[ssid]++ {print $1 "\t" $2 "\t" $3 "\t" ssid}')
+	idx=$(printf '%s\n' "󰖪  Toggle Wi-Fi" "  Advanced (nmtui)" "${rows[@]}" |
+		rofi -dmenu -i -p "Wi-Fi" -format i) || return
+	case $idx in
+		0) if [ "$(nmcli radio wifi)" = enabled ]; then nmcli radio wifi off; else nmcli radio wifi on; fi ;;
+		1) kitty --class nmtui -e nmtui & ;;
+		*) ssid=${ssids[idx-2]}
+		   if nmcli -t -f NAME connection show | grep -Fxq -- "$ssid"; then
+			   nmcli connection up id "$ssid"
+		   else
+			   pass=$(rofi -dmenu -password -p "Password for $ssid" </dev/null)
+			   nmcli device wifi connect "$ssid" ${pass:+password "$pass"}
+		   fi >/dev/null 2>&1 && notify-send "Wi-Fi" "Connected to $ssid" ||
+			   notify-send -u critical "Wi-Fi" "Failed to connect to $ssid" ;;
+	esac
+	refresh
+}
+
+case $1 in
+	vol-up)      wpctl set-mute @DEFAULT_AUDIO_SINK@ 0; wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+; osd "Volume" "$(vol_pct)" ;;
+	vol-down)    wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-; osd "Volume" "$(vol_pct)" ;;
+	vol-mute)    wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle ;;
+	mic-mute)    wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+	             wpctl get-volume @DEFAULT_AUDIO_SOURCE@ | grep -q MUTED &&
+	                 notify-send -t 1200 -h string:x-dunst-stack-tag:dwm-osd "Microphone" "Muted" ||
+	                 osd "Microphone" "$(mic_pct)" ;;
+	mic-up)      wpctl set-mute @DEFAULT_AUDIO_SOURCE@ 0; wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SOURCE@ 5%+; osd "Microphone" "$(mic_pct)" ;;
+	mic-down)    wpctl set-volume @DEFAULT_AUDIO_SOURCE@ 5%-; osd "Microphone" "$(mic_pct)" ;;
+	bright-up)   brightnessctl -q set 5%+; osd "Brightness" "$(brightnessctl -m | cut -d, -f4 | tr -d %)" ;;
+	bright-down) brightnessctl -q -n 1% set 5%-; osd "Brightness" "$(brightnessctl -m | cut -d, -f4 | tr -d %)" ;;
+	net-menu)    net_menu ;;
+	kb-reset)    setxkbmap -layout fr,ir; notify-send -t 1500 -h string:x-dunst-stack-tag:dwm-kb "Keyboard" "Layouts reset (fr, ir) — now fr" ;;
+	kb-next)     g=$(xkb-group next)
+	             IFS=, read -ra lays <<<"$(setxkbmap -query | awk '/^layout/{print $2}')"
+	             case ${lays[g]} in fr) name="Français" ;; ir) name="فارسی (Persian)" ;; *) name=${lays[g]} ;; esac
+	             notify-send -t 1000 -h string:x-dunst-stack-tag:dwm-kb "Keyboard" "${lays[g]}  ·  $name" ;;
+	refresh)     ;;
+	*) echo "usage: dwm-ctl {vol-up|vol-down|vol-mute|mic-mute|mic-up|mic-down|bright-up|bright-down|net-menu|kb-next|kb-reset|refresh}" >&2; exit 1 ;;
+esac
+refresh

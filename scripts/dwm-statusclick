@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# dwm-statusclick <block> — called by dwm (statuscmd patch) when a bar block is clicked.
+# $BUTTON: 1 left, 2 middle, 3 right, 4 scroll up, 5 scroll down
+
+case "$1:$BUTTON" in
+	1:1) dwm-ctl kb-next ;;                                # keyboard: switch fr <-> ir
+	1:3) dwm-ctl kb-reset ;;                               # keyboard: reset layouts
+	2:1) dwm-ctl net-menu ;;                               # network: wifi menu
+	2:3) kitty --class nmtui -e nmtui & ;;                 # network: nmtui
+	3:1) dwm-ctl vol-mute ;;                               # volume: mute
+	3:3) pavucontrol & ;;                                  # volume: mixer
+	3:4) dwm-ctl vol-up ;;
+	3:5) dwm-ctl vol-down ;;
+	4:1) dwm-ctl mic-mute ;;                               # mic: mute
+	4:3) pavucontrol -t 4 & ;;                             # mic: input devices tab
+	4:4) dwm-ctl mic-up ;;
+	4:5) dwm-ctl mic-down ;;
+	5:4) dwm-ctl bright-up ;;                              # brightness
+	5:5) dwm-ctl bright-down ;;
+	6:*) d=/sys/class/power_supply/BAT1                    # battery details
+	     notify-send "Battery" "$(cat $d/status), $(cat $d/capacity)%" ;;
+	7:1) notify-send "$(date '+%B %Y')" "<tt>$(cal | tail -n +2)</tt>" ;;  # calendar
+esac

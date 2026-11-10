@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# dwm-clip — clipboard history (clipmenu + rofi).  The clipmenud daemon is started from ~/.xinitrc.
+#   dwm-clip         pick an old clip, it becomes the current clipboard   (Mod+v)
+#   dwm-clip clear   wipe the history                                     (Mod+Shift+v)
+
+case ${1:-menu} in
+	menu)
+		systemctl --user is-active -q clipmenud || systemctl --user start clipmenud
+		CM_LAUNCHER=rofi CM_HISTLENGTH=15 exec clipmenu -i -p "󰅌 clipboard" ;;
+	clear)
+		ans=$(printf 'No\nYes, clear clipboard history\n' | rofi -dmenu -i -p "Clear history?") || exit 0
+		[[ $ans == Yes* ]] || exit 0
+		clipdel -d '.*' >/dev/null && notify-send -t 1500 "Clipboard" "History cleared" ;;
+	*) echo "usage: dwm-clip [menu|clear]" >&2; exit 1 ;;
+esac

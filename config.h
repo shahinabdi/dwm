@@ -1,4 +1,5 @@
 /* See LICENSE file for copyright and license details. */
+#include <X11/XF86keysym.h>
 
 /* appearance */
 static const unsigned int borderpx  = 1;        /* border pixel of windows */
@@ -64,6 +65,20 @@ static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont,
 static const char *termcmd[]  = { "kitty", NULL };
 static const char *rofi[] = { "rofi", "-show", "drun", NULL };
 
+/* statuscmd: clicking a status block runs `statusclickcmd <block-id>` with $BUTTON set */
+static const char statusclickcmd[] = "dwm-statusclick";
+
+/* media keys (scripts live in ~/.local/bin, see dwm-btw/scripts) */
+static const char *volup[]    = { "dwm-ctl", "vol-up",    NULL };
+static const char *voldown[]  = { "dwm-ctl", "vol-down",  NULL };
+static const char *volmute[]  = { "dwm-ctl", "vol-mute",  NULL };
+static const char *micmute[]  = { "dwm-ctl", "mic-mute",  NULL };
+static const char *brightup[] = { "dwm-ctl", "bright-up", NULL };
+static const char *brightdn[] = { "dwm-ctl", "bright-down", NULL };
+static const char *netmenu[]  = { "dwm-ctl", "net-menu",  NULL };
+static const char *kbreset[]  = { "dwm-ctl", "kb-reset",  NULL };
+static const char *helpcmd[]  = { "dwm-help", NULL };
+
 static const Key keys[] = {
 	/* modifier                     key        function        argument */
 	{ MODKEY,                       XK_d,      spawn,          {.v = rofi } },
@@ -83,37 +98,48 @@ static const Key keys[] = {
 	{ MODKEY,                       XK_t,      setlayout,      {.v = &layouts[0]} },
 	{ MODKEY,                       XK_f,      setlayout,      {.v = &layouts[2]} },
 	{ MODKEY,                       XK_m,      setlayout,      {.v = &layouts[2]} },
-	{ MODKEY,                       XK_space,  setlayout,      {0} },
+	{ MODKEY,                       XK_space,  spawn,          SHCMD("dwm-ctl kb-next") },
+	{ MODKEY|ControlMask,           XK_space,  setlayout,      {0} },
 	{ MODKEY|ShiftMask,             XK_space,  togglefloating, {0} },
 	{ MODKEY|ShiftMask,             XK_e,      spawn,          SHCMD("systemctl suspend") },
 	{ MODKEY|ShiftMask,             XK_x,      spawn,          SHCMD("loginctl lock-session || xset dpms force off") },
-	{ MODKEY,                       XK_0,      view,           {.ui = ~0 } },
-	{ MODKEY|ControlMask|ShiftMask, XK_0,      tag,            {.ui = ~0 } },
 	{ MODKEY,                       XK_comma,  focusmon,       {.i = -1 } },
-	{ MODKEY,                       XK_period, focusmon,       {.i = +1 } },
+	{ MODKEY,                       XK_semicolon, focusmon,       {.i = +1 } },
 	{ MODKEY|ShiftMask,             XK_comma,  tagmon,         {.i = -1 } },
-	{ MODKEY|ShiftMask,             XK_period, tagmon,         {.i = +1 } },
-	{ MODKEY,                       XK_ampersand, view,        {.ui = 1 << 0} },
-	{ MODKEY,                       XK_eacute,    view,        {.ui = 1 << 1} },
-	{ MODKEY,                       XK_quotedbl,  view,        {.ui = 1 << 2} },
-	{ MODKEY,                       XK_apostrophe,view,        {.ui = 1 << 3} },
-	{ MODKEY,                       XK_parenleft, view,        {.ui = 1 << 4} },
-	{ MODKEY,                       XK_minus,     view,        {.ui = 1 << 5} },
-	{ MODKEY,                       XK_egrave,    view,        {.ui = 1 << 6} },
-	{ MODKEY,                       XK_underscore,view,        {.ui = 1 << 7} },
-	{ MODKEY,                       XK_ccedilla,  view,        {.ui = 1 << 8} },
-	{ MODKEY,                       XK_agrave,    view,        {.ui = 1 << 9} },
-	{ MODKEY|ShiftMask,             XK_1,      tag,            {.ui = 1 << 0} },
-	{ MODKEY|ShiftMask,             XK_2,      tag,            {.ui = 1 << 1} },
-	{ MODKEY|ShiftMask,             XK_3,      tag,            {.ui = 1 << 2} },
-	{ MODKEY|ShiftMask,             XK_4,      tag,            {.ui = 1 << 3} },
-	{ MODKEY|ShiftMask,             XK_5,      tag,            {.ui = 1 << 4} },
-	{ MODKEY|ShiftMask,             XK_6,      tag,            {.ui = 1 << 5} },
-	{ MODKEY|ShiftMask,             XK_7,      tag,            {.ui = 1 << 6} },
-	{ MODKEY|ShiftMask,             XK_8,      tag,            {.ui = 1 << 7} },
-	{ MODKEY|ShiftMask,             XK_9,      tag,            {.ui = 1 << 8} },
-	{ MODKEY|ShiftMask,             XK_0,      tag,            {.ui = 1 << 9} },
+	{ MODKEY|ShiftMask,             XK_semicolon, tagmon,         {.i = +1 } },
+	{ MODKEY,                       XK_a,      spawn,          SHCMD("qs -c arch-sidebar ipc call sidebar toggle") },
+	{ MODKEY,                       XK_s,      view,           {.ui = ~0 } },
+	{ MODKEY|ControlMask,           XK_s,      tag,            {.ui = ~0 } },
+	/* clipboard history (dwm-clip) */
+	{ MODKEY,                       XK_v,      spawn,          SHCMD("dwm-clip") },
+	{ MODKEY|ShiftMask,             XK_v,      spawn,          SHCMD("dwm-clip clear") },
+	/* screenshots (dwm-shot) */
+	{ 0,                            XK_Print,  spawn,          SHCMD("dwm-shot full") },
+	{ ShiftMask,                    XK_Print,  spawn,          SHCMD("dwm-shot window") },
+	{ ControlMask,                  XK_Print,  spawn,          SHCMD("dwm-shot annotate") },
+	{ MODKEY,                       XK_Print,  spawn,          SHCMD("dwm-shot menu") },
+	{ MODKEY|ShiftMask,             XK_s,      spawn,          SHCMD("dwm-shot region") },
+	TAGKEYS(                        XK_ampersand,              0)
+	TAGKEYS(                        XK_eacute,                 1)
+	TAGKEYS(                        XK_quotedbl,               2)
+	TAGKEYS(                        XK_apostrophe,             3)
+	TAGKEYS(                        XK_parenleft,              4)
+	TAGKEYS(                        XK_minus,                  5)
+	TAGKEYS(                        XK_egrave,                 6)
+	TAGKEYS(                        XK_underscore,             7)
+	TAGKEYS(                        XK_ccedilla,               8)
+	TAGKEYS(                        XK_agrave,                 9)
 	{ MODKEY|ShiftMask,             XK_q,      quit,           {0} },
+	{ 0,              XF86XK_AudioRaiseVolume,  spawn,         {.v = volup } },
+	{ 0,              XF86XK_AudioLowerVolume,  spawn,         {.v = voldown } },
+	{ 0,              XF86XK_AudioMute,         spawn,         {.v = volmute } },
+	{ 0,              XF86XK_AudioMicMute,      spawn,         {.v = micmute } },
+	{ 0,              XF86XK_MonBrightnessUp,   spawn,         {.v = brightup } },
+	{ 0,              XF86XK_MonBrightnessDown, spawn,         {.v = brightdn } },
+	{ MODKEY,                       XK_n,      spawn,          {.v = netmenu } },
+	{ MODKEY|ShiftMask,             XK_k,      spawn,          {.v = kbreset } },
+	{ MODKEY|ShiftMask,             XK_h,      spawn,          {.v = helpcmd } },
+	{ MODKEY,                       XK_F1,     spawn,          {.v = helpcmd } },
 };
 
 /* button definitions */
@@ -123,7 +149,11 @@ static const Button buttons[] = {
 	{ ClkLtSymbol,          0,              Button1,        setlayout,      {0} },
 	{ ClkLtSymbol,          0,              Button3,        setlayout,      {.v = &layouts[2]} },
 	{ ClkWinTitle,          0,              Button2,        zoom,           {0} },
-	{ ClkStatusText,        0,              Button2,        spawn,          {.v = termcmd } },
+	{ ClkStatusText,        0,              Button1,        statusclick,    {0} },
+	{ ClkStatusText,        0,              Button2,        statusclick,    {0} },
+	{ ClkStatusText,        0,              Button3,        statusclick,    {0} },
+	{ ClkStatusText,        0,              Button4,        statusclick,    {0} },
+	{ ClkStatusText,        0,              Button5,        statusclick,    {0} },
 	{ ClkClientWin,         MODKEY,         Button1,        movemouse,      {0} },
 	{ ClkClientWin,         MODKEY,         Button2,        togglefloating, {0} },
 	{ ClkClientWin,         MODKEY,         Button3,        resizemouse,    {0} },
