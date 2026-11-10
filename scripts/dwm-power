@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# dwm-power — lock / suspend / logout / reboot / shutdown for dwm-btw.
+#   dwm-power lock|suspend|logout|reboot|shutdown
+#   dwm-power menu       rofi menu (asks before logout/reboot/shutdown)   (Mod+Escape)
+
+lock() {
+	pgrep -x i3lock >/dev/null && return
+	i3lock -e -f -c 0b111a "$@"
+}
+
+act() {
+	case $1 in
+		lock)     lock ;;
+		suspend)  lock; sleep 0.3; systemctl suspend ;;
+		logout)   pkill -x dwm ;;
+		reboot)   systemctl reboot ;;
+		shutdown) systemctl poweroff ;;
+		*) echo "usage: dwm-power {lock|suspend|logout|reboot|shutdown|menu}" >&2; exit 1 ;;
+	esac
+}
+
+if [ "$1" = menu ]; then
+	opts=("󰌾  Lock" "󰤄  Suspend" "󰍃  Log out" "󰜉  Reboot" "󰐥  Shut down")
+	acts=(lock suspend logout reboot shutdown)
+	i=$(printf '%s\n' "${opts[@]}" | rofi -dmenu -i -p "󰐥 power" -format i) || exit 0
+	a=${acts[i]}
+	case $a in
+		logout|reboot|shutdown)
+			ans=$(printf 'No\nYes, %s\n' "${opts[i]#*  }" | rofi -dmenu -i -p "Are you sure?") || exit 0
+			[[ $ans == Yes* ]] || exit 0 ;;
+	esac
+	act "$a"
+else
+	act "$1"
+fi

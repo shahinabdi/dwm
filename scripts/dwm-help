@@ -26,6 +26,8 @@ Mod + f  /  Mod + m|Monocle (fullscreen-ish)  [M]
 Mod + Ctrl + Space|Switch to previous layout
 Mod + b|Show / hide bar
 #Tags (workspaces)
+Workspace apps|1 󰆍 kitty  2 󰖟 Brave  3 󰨞 Code  4 󰉋 Thunar  5 󰇮 Mail  6 󰇈 Obsidian  10 󰑊 OBS
+Rules|edit ~/dwm-btw/rules.h (icons: tags.h), then Rebuild
 Mod + & é " '"'"' ( - è _ ç à|Go to tag 1 … 10
 Mod + Shift + & … à|Move window to tag 1 … 10
 Mod + Ctrl + & … à|Also show tag (toggle)
@@ -49,8 +51,11 @@ Brightness keys|Brightness up / down
 Mod + Space|Switch keyboard layout (fr ⇄ ir Persian)
 Mod + Shift + k|Reset keyboard layouts (back to fr)
 Mod + Shift + x|Lock screen
-Mod + Shift + e|Suspend
+Mod + Shift + e|Lock + suspend
+Mod + Escape|Power menu (lock, suspend, log out, reboot, shut down)
+Mod + Shift + d|Display menu (whole-screen scale, font size, resolution)
 Mod + Shift + q|Quit dwm (logout)
+Mod + Ctrl + Shift + q|Restart dwm in place (windows stay)
 #Mouse
 Mod + Left drag|Move window
 Mod + Right drag|Resize window

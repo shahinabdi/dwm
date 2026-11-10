@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# dwm-dev — work on dwm from the desktop: restart in place, rebuild, edit, choose the source folder.
+#
+#   dwm-dev restart     restart dwm in place (windows stay, workspaces kept)   (Mod+Ctrl+Shift+q)
+#   dwm-dev build       make + sudo make install in a terminal, then restart if it succeeded
+#   dwm-dev edit [f]    open config.h (or file f) from the source folder in $EDITOR (vim) in kitty
+#   dwm-dev folder      open the source folder in the file manager
+#   dwm-dev path        print the dwm source folder (asks if not set)
+#   dwm-dev set-path    ask for the dwm source folder (rofi) and save it
+#   dwm-dev menu        rofi menu with everything
+#
+# The folder is saved in ~/.config/dwm-dev.conf
+
+CONF="$HOME/.config/dwm-dev.conf"
+DWM_DIR=""
+[ -r "$CONF" ] && . "$CONF"
+
+note() { notify-send -t 3000 -h string:x-dunst-stack-tag:dwm-dev "$@" 2>/dev/null; }
+valid() { [ -f "$1/dwm.c" ] && [ -f "$1/Makefile" ]; }
+
+set_path() {
+	local guess p
+	guess=${DWM_DIR:-$HOME/dwm-btw}
+	p=$(printf '%s\n' "$guess" | rofi -dmenu -p "dwm source folder" \
+		-mesg "Folder that contains dwm.c, config.h and Makefile (type a path, Enter to save)") || return 1
+	p=${p/#\~/$HOME}; p=${p%/}
+	if ! valid "$p"; then
+		note -u critical "dwm" "No dwm.c + Makefile in $p"
+		return 1
+	fi
+	DWM_DIR=$p
+	printf 'DWM_DIR=%q\n' "$DWM_DIR" > "$CONF"
+	note "dwm" "Source folder: ${DWM_DIR/#$HOME/\~}"
+}
+
+need_path() { valid "$DWM_DIR" || set_path || exit 1; }
+
+# only send SIGHUP if the running dwm has the restart patch (an old dwm would just exit = logout)
+restart() {
+	local pid
+	pid=$(pgrep -x dwm | head -1)
+	[ -n "$pid" ] || { note -u critical "dwm" "dwm is not running"; exit 1; }
+	if ! grep -qa 'dwm-btw-restart-capable' "/proc/$pid/exe" 2>/dev/null; then
+		note -u critical "dwm" $'The running dwm is older than the restart patch.\nLog out once (Mod+Shift+q, then startx).'
+		exit 1
+	fi
+	kill -HUP "$pid"
+	# dwm waits for the next X event before it notices; send it a harmless one
+	xprop -root -f _DWM_WAKE 32c -set _DWM_WAKE "$RANDOM"
+	note "dwm" "Restarted"
+}
+
+build() {
+	need_path
+	if [ -t 1 ]; then
+		cd "$DWM_DIR" || exit 1
+		echo ":: building dwm in $DWM_DIR"
+		if make clean && make && sudo make install; then
+			echo ":: installed — restarting dwm"; restart
+		else
+			echo ":: build FAILED — dwm not restarted"; note -u critical "dwm" "Build failed (see terminal)"
+			read -rp "press Enter to close" _
+			exit 1
+		fi
+	else
+		# started from a key / the sidebar: run in a terminal so sudo can ask and errors are visible
+		exec kitty --class dwm-build --title "dwm build" -e "$0" build
+	fi
+}
+
+edit() {
+	need_path
+	local f=${1:-config.h}
+	[ -f "$DWM_DIR/$f" ] || f=config.def.h
+	exec kitty --class dwm-edit --title "dwm: $f" --directory "$DWM_DIR" -e ${EDITOR:-vim} "$DWM_DIR/$f"
+}
+
+menu() {
+	need_path
+	local c
+	c=$(printf '%s\n' \
+		"󰑓  Restart dwm" \
+		"󰏗  Rebuild + restart" \
+		"󰏫  Edit config.h" \
+		"󰈮  Edit dwm.c" \
+		"󰉋  Open folder" \
+		"󰉖  Change folder  (${DWM_DIR/#$HOME/\~})" |
+		rofi -dmenu -i -p " dwm" -format i) || exit 0
+	case $c in
+		0) restart ;;
+		1) build ;;
+		2) edit config.h ;;
+		3) edit dwm.c ;;
+		4) xdg-open "$DWM_DIR" ;;
+		5) set_path ;;
+	esac
+}
+
+case $1 in
+	restart)  restart ;;
+	build)    build ;;
+	edit)     edit "$2" ;;
+	folder)   need_path; exec xdg-open "$DWM_DIR" ;;
+	path)     need_path; echo "$DWM_DIR" ;;
+	set-path) set_path ;;
+	menu|"")  menu ;;
+	*) sed -n '2,13p' "$0" >&2; exit 1 ;;
+esac

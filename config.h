@@ -6,7 +6,11 @@ static const unsigned int borderpx  = 1;        /* border pixel of windows */
 static const unsigned int snap      = 16;       /* snap pixel */
 static const int showbar            = 1;        /* 0 means no bar */
 static const int topbar             = 1;        /* 0 means bottom bar */
-static const char *fonts[]          = { "JetBrainsMono Nerd Font Mono:size=11" };
+static const int barpad             = 8;        /* bar height = font height + barpad (was 2) */
+static const char *fonts[]          = {
+	"JetBrains Mono:size=11",                 /* text (has no icons, so icons fall through) */
+	"JetBrainsMono Nerd Font Propo:size=14",  /* icons: own, bigger size */
+};
 static const char dmenufont[]       = "JetBrainsMono Nerd Font Mono:size=11";
 static const char col_navy1[]       = "#0b111a";
 static const char col_navy2[]       = "#121a26";
@@ -20,19 +24,9 @@ static const char *colors[][3]      = {
 	[SchemeSel]  = { col_text,  col_navy2, col_steel },
 };
 
-/* tagging */
-static const char *tags[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" };
-
-static const Rule rules[] = {
-	/* xprop(1):
-	 *	WM_CLASS(STRING) = instance, class
-	 *	WM_NAME(STRING) = title
-	 */
-	/* class      instance    title       tags mask     isfloating   monitor */
-	{ "Gimp",     NULL,       NULL,       0,            1,           -1 },
-	{ "Firefox",  NULL,       NULL,       1 << 8,       0,           -1 },
-	{ "Alacritty", NULL,      NULL,       1 << 0,       0,           -1 },
-};
+/* tagging: workspace icons + app rules live in their own files */
+#include "tags.h"
+#include "rules.h"
 
 /* layout(s) */
 static const float mfact     = 0.55; /* factor of master area size [0.05..0.95] */
@@ -63,7 +57,7 @@ static const Layout layouts[] = {
 static char dmenumon[2] = "0";
 static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_navy1, "-nf", col_muted, "-sb", col_steel, "-sf", col_text, NULL };
 static const char *termcmd[]  = { "kitty", NULL };
-static const char *rofi[] = { "rofi", "-show", "drun", NULL };
+static const char *rofi[] = { "rofi", "-show", "drun", "-show-icons", NULL };
 
 /* statuscmd: clicking a status block runs `statusclickcmd <block-id>` with $BUTTON set */
 static const char statusclickcmd[] = "dwm-statusclick";
@@ -101,8 +95,10 @@ static const Key keys[] = {
 	{ MODKEY,                       XK_space,  spawn,          SHCMD("dwm-ctl kb-next") },
 	{ MODKEY|ControlMask,           XK_space,  setlayout,      {0} },
 	{ MODKEY|ShiftMask,             XK_space,  togglefloating, {0} },
-	{ MODKEY|ShiftMask,             XK_e,      spawn,          SHCMD("systemctl suspend") },
-	{ MODKEY|ShiftMask,             XK_x,      spawn,          SHCMD("loginctl lock-session || xset dpms force off") },
+	{ MODKEY|ShiftMask,             XK_e,      spawn,          SHCMD("dwm-power suspend") },
+	{ MODKEY|ShiftMask,             XK_x,      spawn,          SHCMD("dwm-power lock") },
+	{ MODKEY,                       XK_Escape, spawn,          SHCMD("dwm-power menu") },
+	{ MODKEY|ShiftMask,             XK_d,      spawn,          SHCMD("dwm-display menu") },
 	{ MODKEY,                       XK_comma,  focusmon,       {.i = -1 } },
 	{ MODKEY,                       XK_semicolon, focusmon,       {.i = +1 } },
 	{ MODKEY|ShiftMask,             XK_comma,  tagmon,         {.i = -1 } },
@@ -130,6 +126,7 @@ static const Key keys[] = {
 	TAGKEYS(                        XK_ccedilla,               8)
 	TAGKEYS(                        XK_agrave,                 9)
 	{ MODKEY|ShiftMask,             XK_q,      quit,           {0} },
+	{ MODKEY|ControlMask|ShiftMask, XK_q,      restartwm,      {0} },
 	{ 0,              XF86XK_AudioRaiseVolume,  spawn,         {.v = volup } },
 	{ 0,              XF86XK_AudioLowerVolume,  spawn,         {.v = voldown } },
 	{ 0,              XF86XK_AudioMute,         spawn,         {.v = volmute } },

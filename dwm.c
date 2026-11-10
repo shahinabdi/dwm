@@ -138,6 +138,7 @@ typedef struct {
 	unsigned int tags;
 	int isfloating;
 	int monitor;
+	int switchtotag;   /* dwm-btw: jump to the rule's tag when the window opens */
 } Rule;
 
 /* function declarations */
@@ -187,6 +188,8 @@ static Client *nexttiled(Client *c);
 static void pop(Client *c);
 static void propertynotify(XEvent *e);
 static void quit(const Arg *arg);
+static void restartwm(const Arg *arg);
+static void loadtags(Client *c);
 static Monitor *recttomon(int x, int y, int w, int h);
 static void resize(Client *c, int x, int y, int w, int h, int interact);
 static void resizeclient(Client *c, int x, int y, int w, int h);
@@ -265,6 +268,11 @@ static void (*handler[LASTEvent]) (XEvent *) = {
 };
 static Atom wmatom[WMLast], netatom[NetLast];
 static int running = 1;
+static int scanning = 0;   /* no switchtotag while re-adopting windows (startup/restart) */
+/* restart in place (dwm-btw): Mod+Ctrl+Shift+q, or SIGHUP (`dwm-dev restart`) */
+static volatile sig_atomic_t restart = 0;
+static Atom dwmtags;
+const char dwm_btw_restart_marker[] = "dwm-btw-restart-capable";
 static Cur *cursor[CurLast];
 static Clr **scheme;
 static Display *dpy;
@@ -279,6 +287,13 @@ static Window root, wmcheckwin;
 struct NumTags { char limitexceeded[LENGTH(tags) > 31 ? -1 : 1]; };
 
 /* function implementations */
+/* rule match: substring, or exact when the pattern starts with '=' (dwm-btw) */
+static int
+rulematch(const char *s, const char *pat)
+{
+	return pat[0] == '=' ? !strcmp(s, pat + 1) : strstr(s, pat) != NULL;
+}
+
 void
 applyrules(Client *c)
 {
@@ -287,6 +302,7 @@ applyrules(Client *c)
 	const Rule *r;
 	Monitor *m;
 	XClassHint ch = { NULL, NULL };
+	unsigned int switchto = 0;
 
 	/* rule matching */
 	c->isfloating = 0;
@@ -297,12 +313,14 @@ applyrules(Client *c)
 
 	for (i = 0; i < LENGTH(rules); i++) {
 		r = &rules[i];
-		if ((!r->title || strstr(c->name, r->title))
-		&& (!r->class || strstr(class, r->class))
-		&& (!r->instance || strstr(instance, r->instance)))
+		if ((!r->title || rulematch(c->name, r->title))
+		&& (!r->class || rulematch(class, r->class))
+		&& (!r->instance || rulematch(instance, r->instance)))
 		{
 			c->isfloating = r->isfloating;
 			c->tags |= r->tags;
+			if (r->switchtotag)
+				switchto |= r->tags;
 			for (m = mons; m && m->num != r->monitor; m = m->next);
 			if (m)
 				c->mon = m;
@@ -313,6 +331,13 @@ applyrules(Client *c)
 	if (ch.res_name)
 		XFree(ch.res_name);
 	c->tags = c->tags & TAGMASK ? c->tags & TAGMASK : c->mon->tagset[c->mon->seltags];
+	/* dwm-btw: follow the app to its workspace */
+	switchto &= TAGMASK;
+	if (switchto && !scanning && c->mon == selmon
+	&& !(switchto & selmon->tagset[selmon->seltags])) {
+		Arg a = { .ui = switchto };
+		view(&a);
+	}
 }
 
 int
@@ -1096,6 +1121,7 @@ manage(Window w, XWindowAttributes *wa)
 	} else {
 		c->mon = selmon;
 		applyrules(c);
+		loadtags(c);
 	}
 
 	if (c->x + WIDTH(c) > c->mon->wx + c->mon->ww)
@@ -1304,6 +1330,76 @@ void
 quit(const Arg *arg)
 {
 	running = 0;
+}
+
+void
+restartwm(const Arg *arg)
+{
+	restart = 1;
+	running = 0;
+}
+
+static void
+sighup(int unused)
+{
+	restart = 1;
+	running = 0;
+}
+
+/* remember each window's tags on the window itself so they survive a restart */
+static void
+savetags(void)
+{
+	Monitor *m;
+	Client *c;
+	long t;
+
+	for (m = mons; m; m = m->next)
+		for (c = m->clients; c; c = c->next) {
+			t = c->tags;
+			XChangeProperty(dpy, c->win, dwmtags, XA_CARDINAL, 32,
+				PropModeReplace, (unsigned char *)&t, 1);
+		}
+	/* and the workspace being viewed */
+	t = selmon->tagset[selmon->seltags];
+	XChangeProperty(dpy, root, dwmtags, XA_CARDINAL, 32,
+		PropModeReplace, (unsigned char *)&t, 1);
+}
+
+/* after a restart: go back to the workspace that was being viewed */
+static void
+loadview(void)
+{
+	Atom type;
+	int format;
+	unsigned long n, extra;
+	unsigned char *p = NULL;
+	Arg a;
+
+	if (XGetWindowProperty(dpy, root, dwmtags, 0, 1, True, XA_CARDINAL,
+			&type, &format, &n, &extra, &p) == Success && p) {
+		if (n == 1 && format == 32 && (*(long *)p & TAGMASK)) {
+			a.ui = *(long *)p & TAGMASK;
+			view(&a);
+		}
+		XFree(p);
+	}
+}
+
+static void
+loadtags(Client *c)
+{
+	Atom type;
+	int format;
+	unsigned long n, extra;
+	unsigned char *p = NULL;
+
+	if (XGetWindowProperty(dpy, c->win, dwmtags, 0, 1, True, XA_CARDINAL,
+			&type, &format, &n, &extra, &p) == Success && p) {
+		if (n == 1 && format == 32 && (*(long *)p & TAGMASK))
+			c->tags = *(long *)p & TAGMASK;
+		XFree(p);
+	}
 }
 
 Monitor *
@@ -1595,6 +1691,13 @@ setup(void)
 	sa.sa_handler = SIG_IGN;
 	sigaction(SIGCHLD, &sa, NULL);
 
+	/* SIGHUP = restart in place */
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sa.sa_handler = sighup;
+	sigaction(SIGHUP, &sa, NULL);
+	dwmtags = XInternAtom(dpy, "_DWM_TAGS", False);
+
 	/* clean up any zombies (inherited from .xinitrc etc) immediately */
 	while (waitpid(-1, NULL, WNOHANG) > 0);
 
@@ -1607,7 +1710,7 @@ setup(void)
 	if (!drw_fontset_create(drw, fonts, LENGTH(fonts)))
 		die("no fonts could be loaded.");
 	lrpad = drw->fonts->h;
-	bh = drw->fonts->h + 2;
+	bh = drw->fonts->h + barpad;
 	updategeom();
 	/* init atoms */
 	utf8string = XInternAtom(dpy, "UTF8_STRING", False);
@@ -2253,9 +2356,18 @@ main(int argc, char *argv[])
 	if (pledge("stdio rpath proc exec", NULL) == -1)
 		die("pledge");
 #endif /* __OpenBSD__ */
+	scanning = 1;
 	scan();
+	scanning = 0;
+	loadview();
 	run();
+	if (restart)
+		savetags();
 	cleanup();
 	XCloseDisplay(dpy);
+	if (restart) {
+		execvp(argv[0], argv);
+		perror("dwm: restart failed");
+	}
 	return EXIT_SUCCESS;
 }

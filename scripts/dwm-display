@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# dwm-display — scaling, font size and resolution (Omarchy-style) for dwm-btw on X11.
+#
+#   dwm-display scale 100|125|150|175|200   scale the WHOLE screen now (xrandr; bar, apps, menus)
+#   dwm-display font +|-|<size>             font size everywhere: kitty, GTK (live), Qt, rofi, notifications
+#   dwm-display res <WxH>|auto              screen resolution (asks to keep it, reverts after 15 s)
+#   dwm-display menu | res-menu             rofi menus                             (Mod+Shift+d)
+#   dwm-display apply                       re-apply saved resolution + scale at login (~/.xinitrc)
+#   dwm-display status                      print "scale=… font=… res=… modes=…"
+#
+# Saved settings: ~/.config/dwm-display.conf
+# Live GTK settings: ~/.config/xsettingsd/xsettingsd.conf (xsettingsd is started from ~/.xinitrc)
+
+CONF="$HOME/.config/dwm-display.conf"
+KITTY="$HOME/.config/kitty/kitty.conf"
+GTK3="$HOME/.config/gtk-3.0/settings.ini"
+GTK4="$HOME/.config/gtk-4.0/settings.ini"
+ROFI="$HOME/.config/rofi/config.rasi"
+DUNST="$HOME/.config/dunst/dunstrc"
+XSET="$HOME/.config/xsettingsd/xsettingsd.conf"
+
+SCALE=100 RES=auto
+[ -r "$CONF" ] && . "$CONF"
+
+save() { printf 'SCALE=%s\nRES=%s\n' "$SCALE" "$RES" > "$CONF"; }
+note() { notify-send -t 2500 -h string:x-dunst-stack-tag:dwm-display "$@" 2>/dev/null; }
+output() { xrandr --query | awk '/ connected primary/{print $1; exit} / connected/ && !o {o=$1} END{if(o)print o}' | head -1; }
+cur_res() { xrandr --query | awk -v o="$(output)" '$1==o{f=1;next} f&&/^ /&&/\*/{print $1; exit} f&&!/^ /{exit}'; }
+native() { xrandr --query | awk -v o="$(output)" '$1==o{f=1;next} f&&/^ /&&/\+/{print $1; exit} f&&!/^ /{exit}'; }
+modes() { xrandr --query | awk -v o="$(output)" '$1==o{f=1;next} f&&/^ /{print $1; next} f{exit}' | awk '!seen[$0]++'; }
+font_size() { awk '/^font_size/{print $2+0; exit}' "$KITTY" 2>/dev/null; }
+wallpaper() { feh --bg-fill "$HOME/dwm-btw/current.jpg" 2>/dev/null; }
+
+# set mode ($1 or saved/native) and the whole-screen scale in one xrandr call
+apply_mode() {
+	local out mode w h
+	out=$(output)
+	mode=${1:-$RES}; [ "$mode" = auto ] && mode=$(native)
+	w=${mode%x*}; h=${mode#*x}
+	if (( SCALE == 100 )); then
+		xrandr --output "$out" --mode "$mode" --scale 1x1
+	else
+		# render a smaller desktop and stretch it to the panel => everything is bigger
+		xrandr --output "$out" --mode "$mode" --scale-from "$(( w * 100 / SCALE ))x$(( h * 100 / SCALE ))"
+	fi
+	wallpaper
+}
+
+scale() {
+	local pct=$1
+	[[ $pct =~ ^[0-9]+$ ]] && (( pct >= 100 && pct <= 250 )) || { echo "scale: 100-250" >&2; exit 1; }
+	SCALE=$pct; save
+	apply_mode
+	note "Display scale ${pct}%" "Whole screen scaled."
+}
+
+# shift the trailing number of "key=… N" lines by $D (min 6)
+# (only the number changes; the line ending is left alone)
+shift_trailing() { D=$1 perl -pi -e "s/^(\s*$2.*\D)(\d+)(\"?;?[ \t]*)\$/\$1 . (\$2+\$ENV{D} < 6 ? 6 : \$2+\$ENV{D}) . \$3/e" "$3"; }
+
+font() {
+	local cur new d f
+	cur=$(font_size); cur=${cur%.*}; cur=${cur:-12}
+	case $1 in
+		+) new=$(( cur + 1 )) ;;
+		-) new=$(( cur - 1 )) ;;
+		*) new=${1%.*} ;;
+	esac
+	[[ $new =~ ^[0-9]+$ ]] && (( new >= 6 && new <= 40 )) || { echo "font: 6-40" >&2; exit 1; }
+	d=$(( new - cur ))
+	(( d == 0 )) && exit 0
+
+	# kitty (live: SIGUSR1 reloads the config)
+	sed -i "s/^font_size.*/font_size        ${new}.0/" "$KITTY"
+	pkill -USR1 -x kitty 2>/dev/null
+
+	# GTK files (for apps started without xsettingsd) + xsettingsd (live for running GTK apps)
+	for f in "$GTK3" "$GTK4"; do [ -f "$f" ] && shift_trailing "$d" 'gtk-font-name=' "$f"; done
+	[ -f "$XSET" ] && shift_trailing "$d" 'Gtk\/FontName ' "$XSET" && pkill -HUP -x xsettingsd
+
+	# Qt (qt5ct / qt6ct): second field of the font spec is the point size
+	for f in "$HOME/.config/qt5ct/qt5ct.conf" "$HOME/.config/qt6ct/qt6ct.conf"; do
+		[ -f "$f" ] && D=$d perl -pi -e 's/^((?:general|fixed)="[^,]*),(\d+),/"$1," . ($2+$ENV{D} < 6 ? 6 : $2+$ENV{D}) . ","/e' "$f"
+	done
+
+	# rofi + dunst (notifications)
+	[ -f "$ROFI" ] && shift_trailing "$d" 'font:' "$ROFI"
+	if [ -f "$DUNST" ]; then
+		shift_trailing "$d" 'font =' "$DUNST"
+		dunstctl reload 2>/dev/null || { pkill -x dunst; setsid -f dunst >/dev/null 2>&1; }
+	fi
+
+	note "Font size $new" "kitty, GTK, rofi and notifications updated (Qt apps on restart)."
+}
+
+res() {
+	local old new ans
+	old=$(cur_res)
+	[ "$1" = auto ] && new=$(native) || new=$1
+	apply_mode "$new" || exit 1
+	ans=$(printf 'Keep %s\nRevert to %s\n' "$new" "$old" |
+		timeout 15 rofi -dmenu -i -p "Keep resolution? (reverts in 15 s)")
+	if [[ $ans == Keep* ]]; then
+		RES=$1; save; note "Resolution $new" "Saved."
+	else
+		apply_mode "$old"; note "Resolution reverted" "$old"
+	fi
+}
+
+res_menu() {
+	local cur m
+	cur=$(cur_res)
+	m=$( { echo "auto (native)"; modes | awk -Fx '$1 >= 1024'; } | sed "s/^$cur\$/$cur  (current)/" |
+		rofi -dmenu -i -p "󰍹 resolution") || exit 0
+	m=${m%% *}
+	res "$m"
+}
+
+menu() {
+	local c
+	c=$(printf '%s\n' \
+		"󰁌  Scale  (${SCALE}%)" \
+		"󰛖  Font size  ($(font_size))" \
+		"󰍹  Resolution  ($(cur_res))" |
+		rofi -dmenu -i -p "󰍹 display" -format i) || exit 0
+	case $c in
+		0) c=$(printf '%s\n' 100 125 150 175 200 | sed "s/^$SCALE\$/$SCALE  (current)/" |
+		       rofi -dmenu -i -p "Scale %") || exit 0; scale "${c%% *}" ;;
+		1) c=$(printf '%s\n' "+ bigger" "- smaller" 10 11 12 13 14 15 16 18 20 |
+		       rofi -dmenu -i -p "Font size (now $(font_size))") || exit 0; font "${c%% *}" ;;
+		2) res_menu ;;
+	esac
+}
+
+case $1 in
+	scale)    scale "$2" ;;
+	font)     font "$2" ;;
+	res)      res "$2" ;;
+	res-menu) res_menu ;;
+	menu|"")  menu ;;
+	apply)    [ "$RES" != auto ] || (( SCALE != 100 )) && apply_mode ;;
+	status)   echo "scale=$SCALE font=$(font_size) res=$(cur_res) modes=$(modes | paste -sd,)" ;;
+	*) sed -n '2,12p' "$0" >&2; exit 1 ;;
+esac
