@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# dwm-wall — wallpaper manager for dwm-btw (feh).
+#
+#   dwm-wall menu                  rofi picker with thumbnails + actions        (Mod+w)
+#   dwm-wall next | prev | random  cycle through the wallpaper folder          (Mod+Shift+w = next)
+#   dwm-wall set <file>            use this image (copied into the folder if it lives elsewhere)
+#   dwm-wall mode fill|fit|center|tile   how the image covers the screen
+#   dwm-wall slideshow on|off|toggle [5m|15m|30m|1h]   change wallpaper automatically
+#   dwm-wall add [file...]         copy images into the folder (no file: thumbnail picker)
+#   dwm-wall open                  open the folder in the file manager
+#   dwm-wall restore               re-apply at login (~/.xinitrc) / after resolution changes
+#   dwm-wall list | current | status
+#
+# Folder:   ~/Pictures/Wallpapers (WALL_DIR in the config)
+# Config:   ~/.config/dwm-wall.conf  (WALL, MODE, SLIDESHOW, INTERVAL)
+
+CONF="$HOME/.config/dwm-wall.conf"
+WALL_DIR="$HOME/Pictures/Wallpapers"
+WALL="" MODE=fill SLIDESHOW=0 INTERVAL=15m
+[ -r "$CONF" ] && . "$CONF"
+PIDFILE="${XDG_RUNTIME_DIR:-/tmp}/dwm-wall-slideshow.pid"
+
+save() {
+	printf 'WALL_DIR=%q\nWALL=%q\nMODE=%q\nSLIDESHOW=%q\nINTERVAL=%q\n' \
+		"$WALL_DIR" "$WALL" "$MODE" "$SLIDESHOW" "$INTERVAL" > "$CONF"
+}
+note() { notify-send -t 2200 -h string:x-dunst-stack-tag:dwm-wall ${2:+-i "$2"} "Wallpaper" "$1" 2>/dev/null; }
+images() { # newest first
+	find "$WALL_DIR" -maxdepth 2 -type f -not -path '*/.*' \
+		\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) \
+		-printf '%T@\t%p\n' 2>/dev/null | sort -rn | cut -f2
+}
+sorted() { images | sort; } # stable order for next / prev
+
+apply() {
+	[ -f "$WALL" ] || return 1
+	feh --no-fehbg "--bg-$MODE" "$WALL" 2>/dev/null
+}
+
+set_wall() {
+	local f=${1/#\~/$HOME}
+	[ -f "$f" ] || { note "Not a file: $f"; return 1; }
+	file -b --mime-type "$f" | grep -q '^image/' || { note "Not an image: $(basename "$f")"; return 1; }
+	case $f in "$WALL_DIR"/*) ;; *) mkdir -p "$WALL_DIR"; cp -n "$f" "$WALL_DIR/"; f="$WALL_DIR/$(basename "$f")" ;; esac
+	WALL=$f; save; apply
+	[ "${QUIET:-0}" = 1 ] || note "$(basename "$WALL")" "$WALL"
+}
+
+step() { # +1 / -1 / random
+	local list n i cur
+	mapfile -t list < <(sorted)
+	n=${#list[@]}
+	(( n )) || { note "No images in ${WALL_DIR/#$HOME/\~} yet"; return 1; }
+	if [ "$1" = random ]; then
+		(( n > 1 )) || { set_wall "${list[0]}"; return; }
+		while :; do i=$((RANDOM % n)); [ "${list[i]}" != "$WALL" ] && break; done
+	else
+		cur=-1
+		for i in "${!list[@]}"; do [ "${list[i]}" = "$WALL" ] && cur=$i; done
+		i=$(( (cur + $1 + n) % n ))
+	fi
+	set_wall "${list[i]}"
+}
+
+slideshow_stop() { [ -r "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null; rm -f "$PIDFILE"; }
+slideshow_start() {
+	slideshow_stop
+	( echo $BASHPID > "$PIDFILE"
+	  while sleep "$INTERVAL"; do QUIET=1 "$0" random; done ) >/dev/null 2>&1 &
+	disown
+}
+
+pick_external() { # an image from ~/Pictures or ~/Downloads (not already in the folder), or a typed path
+	local c
+	c=$( {
+		printf 'Type a path…\0icon\x1ffolder\n'
+		find "$HOME/Pictures" "$HOME/Downloads" -maxdepth 3 -type f -not -path '*/.*' -not -path "$WALL_DIR/*" \
+			\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) -printf '%T@\t%p\n' 2>/dev/null |
+			sort -rn | cut -f2 | head -200 | while IFS= read -r f; do printf '%s\0icon\x1f%s\n' "${f/#$HOME/\~}" "$f"; done
+	} | rofi -dmenu -i -show-icons -p "󰐕 add wallpaper" -theme-str 'element-icon { size: 64px; } listview { lines: 6; }') || return 1
+	if [ "$c" = "Type a path…" ]; then
+		c=$(rofi -dmenu -p "image path" -mesg "Full path to an image, e.g. ~/Downloads/wall.jpg" </dev/null) || return 1
+	fi
+	echo "${c/#\~/$HOME}"
+}
+
+menu() {
+	local choice f
+	choice=$( {
+		printf 'Random\0icon\x1fmedia-playlist-shuffle\n'
+		printf 'Add image…\0icon\x1flist-add\n'
+		printf 'Fit mode: %s\0icon\x1fview-fullscreen\n' "$MODE"
+		printf 'Slideshow: %s\0icon\x1fmedia-playback-start\n' "$([ "$SLIDESHOW" = 1 ] && echo "on, every $INTERVAL" || echo off)"
+		printf 'Open folder\0icon\x1ffolder\n'
+		while IFS= read -r f; do
+			printf '%s%s\0icon\x1f%s\n' "$([ "$f" = "$WALL" ] && echo '● ')" "$(basename "$f")" "$f"
+		done < <(images)
+	} | rofi -dmenu -i -show-icons -p "󰸉 wallpaper" -format 'i s' \
+		-theme-str 'element-icon { size: 64px; } listview { lines: 6; } window { width: 760px; }') || return 0
+	local idx=${choice%% *} txt=${choice#* }
+	case $idx in
+		0) step random ;;
+		1) f=$(pick_external) || return 0
+		   [ -n "$f" ] && set_wall "$f" ;;
+		2) f=$(printf '%s\n' fill fit center tile | rofi -dmenu -p "fit mode" -mesg "fill: cover the screen (crop) · fit: whole image, bars if needed · center: no scaling · tile: repeat") || return 0
+		   "$0" mode "$f" ;;
+		3) f=$(printf '%s\n' off 5m 15m 30m 1h | rofi -dmenu -p "slideshow" -mesg "Change to a random wallpaper every …") || return 0
+		   if [ "$f" = off ]; then "$0" slideshow off; else "$0" slideshow on "$f"; fi ;;
+		4) xdg-open "$WALL_DIR" ;;
+		*) set_wall "$(images | sed -n "$((idx - 4))p")" ;;
+	esac
+}
+
+mkdir -p "$WALL_DIR"
+case $1 in
+	set)     set_wall "$2" ;;
+	next)    step 1 ;;
+	prev)    step -1 ;;
+	random)  step random ;;
+	mode)
+		case $2 in fill|fit|center|tile) MODE=$2 ;; *) echo "mode: fill|fit|center|tile" >&2; exit 1 ;; esac
+		[ "$MODE" = fit ] && MODE=max   # feh calls it --bg-max
+		save; apply; note "Fit mode: $2" ;;
+	slideshow)
+		[ -n "$3" ] && INTERVAL=$3
+		case $2 in on) SLIDESHOW=1 ;; off) SLIDESHOW=0 ;; *) SLIDESHOW=$((1 - SLIDESHOW)) ;; esac
+		save
+		if [ "$SLIDESHOW" = 1 ]; then slideshow_start; note "Slideshow on — every $INTERVAL"; else slideshow_stop; note "Slideshow off"; fi ;;
+	open)    xdg-open "$WALL_DIR" ;;
+	add)
+		shift
+		if [ $# -eq 0 ]; then f=$(pick_external) && [ -n "$f" ] && set_wall "$f"; exit 0; fi
+		n=0
+		for f in "$@"; do f=${f/#\~/$HOME}; file -b --mime-type "$f" 2>/dev/null | grep -q '^image/' && cp -n "$f" "$WALL_DIR/" && n=$((n + 1)); done
+		note "$n image(s) added to ${WALL_DIR/#$HOME/\~}" ;;
+	restore)
+		if [ -z "$WALL" ] || [ ! -f "$WALL" ]; then WALL=$(images | head -1); [ -n "$WALL" ] && save; fi
+		apply
+		[ "$SLIDESHOW" = 1 ] && [ "$2" != --no-slideshow ] && slideshow_start ;;
+	list)    images ;;
+	current) echo "$WALL" ;;
+	status)  printf 'wall=%s\nmode=%s\nslideshow=%s\ninterval=%s\ndir=%s\ncount=%s\n' \
+	           "$WALL" "$([ "$MODE" = max ] && echo fit || echo "$MODE")" "$SLIDESHOW" "$INTERVAL" "$WALL_DIR" "$(images | wc -l)" ;;
+	menu|"") menu ;;
+	*) sed -n '2,15p' "$0" >&2; exit 1 ;;
+esac

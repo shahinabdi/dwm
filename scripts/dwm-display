@@ -6,6 +6,7 @@
 #   dwm-display res <WxH>|auto              screen resolution (asks to keep it, reverts after 15 s)
 #   dwm-display menu | res-menu             rofi menus                             (Mod+Shift+d)
 #   dwm-display apply                       re-apply saved resolution + scale at login (~/.xinitrc)
+#   dwm-display reset                       scale 100%, native resolution, font 14, bar 1×
 #   dwm-display status                      print "scale=… font=… res=… modes=…"
 #
 # Saved settings: ~/.config/dwm-display.conf
@@ -29,7 +30,7 @@ cur_res() { xrandr --query | awk -v o="$(output)" '$1==o{f=1;next} f&&/^ /&&/\*/
 native() { xrandr --query | awk -v o="$(output)" '$1==o{f=1;next} f&&/^ /&&/\+/{print $1; exit} f&&!/^ /{exit}'; }
 modes() { xrandr --query | awk -v o="$(output)" '$1==o{f=1;next} f&&/^ /{print $1; next} f{exit}' | awk '!seen[$0]++'; }
 font_size() { awk '/^font_size/{print $2+0; exit}' "$KITTY" 2>/dev/null; }
-wallpaper() { feh --bg-fill "$HOME/dwm-btw/current.jpg" 2>/dev/null; }
+wallpaper() { dwm-wall restore --no-slideshow 2>/dev/null; }
 
 # set mode ($1 or saved/native) and the whole-screen scale in one xrandr call
 apply_mode() {
@@ -143,7 +144,7 @@ barscale() {
 	# keep notifications just below the (new) bar
 	sleep 1.2
 	local h d="$HOME/.config/dunst/dunstrc"
-	h=$(xwininfo -root -tree 2>/dev/null | grep -m1 '("dwm" "dwm")' | grep -oE ' [0-9]+x[0-9]+' | cut -dx -f2)
+	h=$(xwininfo -root -tree 2>/dev/null | grep -m1 '("dwm" "dwm")' | grep -oE ' [0-9]+x[0-9]+\+' | head -1 | tr -d + | cut -dx -f2)
 	if [ -n "$h" ] && [ -f "$d" ]; then
 		sed -i -E "s/^(\s*offset\s*=\s*\(\s*[0-9]+\s*,\s*)[0-9]+(\s*\))/\1$((h + 14))\2/" "$d"
 		dunstctl reload 2>/dev/null
@@ -151,7 +152,16 @@ barscale() {
 	note "Bar size ${k}×" "dwm restarted in place."
 }
 
+reset() { # defaults: scale 100%, native resolution, font 14, bar 1x (last: restarts dwm)
+	SCALE=100 RES=auto; save
+	apply_mode
+	[ "$(font_size)" = 14 ] || font 14
+	barscale 1
+	note "Display reset" "scale 100% · native resolution · font 14 · bar 1×"
+}
+
 case $1 in
+	reset)    reset ;;
 	bar)      barscale "$2" ;;
 	scale)    scale "$2" ;;
 	font)     font "$2" ;;
@@ -159,6 +169,6 @@ case $1 in
 	res-menu) res_menu ;;
 	menu|"")  menu ;;
 	apply)    [ "$RES" != auto ] || (( SCALE != 100 )) && apply_mode ;;
-	status)   echo "scale=$SCALE bar=$(xrdb -query | awk '/^dwm.barscale:/{print $2}' | grep . || echo 1) barh=$(xwininfo -root -tree 2>/dev/null | grep -m1 '("dwm" "dwm")' | grep -oE ' [0-9]+x[0-9]+' | cut -dx -f2 | grep . || echo 28) font=$(font_size) res=$(cur_res) modes=$(modes | paste -sd,)" ;;
+	status)   echo "scale=$SCALE bar=$(xrdb -query | awk '/^dwm.barscale:/{print $2}' | grep . || echo 1) barh=$(xwininfo -root -tree 2>/dev/null | grep -m1 '("dwm" "dwm")' | grep -oE ' [0-9]+x[0-9]+\+' | head -1 | tr -d + | cut -dx -f2 | grep . || echo 28) font=$(font_size) res=$(cur_res) modes=$(modes | paste -sd,)" ;;
 	*) sed -n '2,12p' "$0" >&2; exit 1 ;;
 esac

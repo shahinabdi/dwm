@@ -1,6 +1,6 @@
 /* tags.h — workspace names / icons (included from config.h).
  * Nerd Font glyphs; keep exactly 10 entries (keys & … à).
- *  1 terminal   2 browser   3 code   4 files   5 mail   6 notes   7-9 free   10 OBS */
+ *  1 terminal   2 browser   3 code   4 files   5 mail   6 notes   7 VLC   8-9 free   10 OBS */
 static const char *tags[] = {
 	"\U000F018D",   /* 1  terminal  (kitty)          */
 	"\U000F059F",   /* 2  web       (Brave)          */
@@ -8,6 +8,7 @@ static const char *tags[] = {
 	"\U000F024B",   /* 4  files     (Thunar)         */
 	"\U000F01EE",   /* 5  mail      (Proton Mail)    */
 	"\U000F01C8",   /* 6  notes     (Obsidian)       */
-	"7", "8", "9",
+	"\U000F057C",   /* 7  media     (VLC)            */
+	"8", "9",
 	"\U000F044A",   /* 10 record    (OBS Studio)     */
 };

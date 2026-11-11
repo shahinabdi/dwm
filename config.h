@@ -6,6 +6,10 @@ static const unsigned int borderpx  = 1;        /* border pixel of windows */
 static const unsigned int snap      = 16;       /* snap pixel */
 static const int showbar            = 1;        /* 0 means no bar */
 static const int topbar             = 1;        /* 0 means bottom bar */
+static const int gapinner           = 10;       /* gap between windows (px), runtime: dwm.gapinner */
+static const int gapouter           = 10;       /* gap to the screen edge (px), runtime: dwm.gapouter */
+static const int gapsenabled        = 1;        /* runtime: dwm.gaps (Mod+Shift+g) */
+static const int smartgaps          = 1;        /* 1 = no gaps when only one window is tiled */
 static const int barpad             = 8;        /* bar height = font height + barpad (was 2) */
 static const char *fonts[]          = {
 	"JetBrains Mono:size=11",                 /* text (has no icons, so icons fall through) */
@@ -103,6 +107,10 @@ static const Key keys[] = {
 	{ MODKEY,                       XK_f,      setlayout,      {.v = &layouts[7]} },
 	{ MODKEY,                       XK_m,      setlayout,      {.v = &layouts[7]} },
 	{ MODKEY,                       XK_g,      setlayout,      {.v = &layouts[3]} },
+	/* gaps */
+	{ MODKEY|ShiftMask,             XK_g,      spawn,          SHCMD("dwm-layout gaps toggle") },
+	{ MODKEY|ShiftMask,             XK_Up,     spawn,          SHCMD("dwm-layout gaps +2") },
+	{ MODKEY|ShiftMask,             XK_Down,   spawn,          SHCMD("dwm-layout gaps -2") },
 	{ MODKEY,                       XK_c,      setlayout,      {.v = &layouts[2]} },
 	{ MODKEY|ShiftMask,             XK_Right,  cyclelayout,    {.i = +1 } },
 	{ MODKEY|ShiftMask,             XK_Left,   cyclelayout,    {.i = -1 } },
@@ -130,6 +138,9 @@ static const Key keys[] = {
 	{ ControlMask,                  XK_Print,  spawn,          SHCMD("dwm-shot annotate") },
 	{ MODKEY,                       XK_Print,  spawn,          SHCMD("dwm-shot menu") },
 	{ MODKEY|ShiftMask,             XK_s,      spawn,          SHCMD("dwm-shot region") },
+	/* wallpaper */
+	{ MODKEY,                       XK_w,      spawn,          SHCMD("dwm-wall menu") },
+	{ MODKEY|ShiftMask,             XK_w,      spawn,          SHCMD("dwm-wall next") },
 	/* colour picker */
 	{ MODKEY|ShiftMask,             XK_c,      spawn,          SHCMD("dwm-color") },
 	TAGKEYS(                        XK_ampersand,              0)

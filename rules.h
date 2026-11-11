@@ -17,6 +17,7 @@ static const Rule rules[] = {
 	{ "Thunar",               NULL,     NULL,  1 << 3,  0,          -1,      1 },
 	{ "proton-mail",          NULL,     NULL,  1 << 4,  0,          -1,      1 },
 	{ "Obsidian",             NULL,     NULL,  1 << 5,  0,          -1,      1 },  /* md.obsidian.Obsidian */
+	{ "=vlc",                 NULL,     NULL,  1 << 6,  0,          -1,      1 },  /* VLC (exact) */
 	{ "=obs",                 NULL,     NULL,  1 << 9,  0,          -1,      1 },  /* OBS Studio (exact) */
 
 	/* floating helpers */

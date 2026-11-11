@@ -274,6 +274,7 @@ static Atom wmatom[WMLast], netatom[NetLast];
 static int running = 1;
 static int scanning = 0;
 static int barpadk;       /* barpad times dwm.barscale */
+static int gi, go, gon, gsmart; /* dwm-btw gaps: inner, outer, enabled, smart (from config + X resources) */
 static Atom dwmcmd, dwmstate; /* dwm-btw: commands in (_DWM_CMD), state out (_DWM_STATE) on the root window */   /* no switchtotag while re-adopting windows (startup/restart) */
 /* restart in place (dwm-btw): Mod+Ctrl+Shift+q, or SIGHUP (`dwm-dev restart`) */
 static volatile sig_atomic_t restart = 0;
@@ -432,9 +433,32 @@ arrange(Monitor *m)
 void
 arrangemon(Monitor *m)
 {
+	unsigned int n;
+	int wx, wy, ww, wh, l, r, t, b;
+	Client *c;
+
 	snprintf(m->ltsymbol, sizeof(m->ltsymbol), "%s", m->lt[m->sellt]->symbol);
-	if (m->lt[m->sellt]->arrange)
+	if (!m->lt[m->sellt]->arrange)
+		return;
+	for (n = 0, c = nexttiled(m->clients); c; c = nexttiled(c->next), n++);
+	if (!gon || n == 0 || (gsmart && n == 1) || (gi <= 0 && go <= 0)) {
 		m->lt[m->sellt]->arrange(m);
+		return;
+	}
+	/* dwm-btw gaps: outer gaps = shrink the work area for the layout,
+	 * inner gaps = half a gap on every edge that does not touch the work area border */
+	wx = m->wx; wy = m->wy; ww = m->ww; wh = m->wh;
+	m->wx += go; m->wy += go; m->ww -= 2 * go; m->wh -= 2 * go;
+	m->lt[m->sellt]->arrange(m);
+	for (c = nexttiled(m->clients); c; c = nexttiled(c->next)) {
+		l = c->x > m->wx + 1 ? gi / 2 : 0;
+		t = c->y > m->wy + 1 ? gi / 2 : 0;
+		r = c->x + WIDTH(c) < m->wx + m->ww - 1 ? gi - gi / 2 : 0;
+		b = c->y + HEIGHT(c) < m->wy + m->wh - 1 ? gi - gi / 2 : 0;
+		if (l || t || r || b)
+			resize(c, c->x + l, c->y + t, MAX(1, c->w - l - r), MAX(1, c->h - t - b), 0);
+	}
+	m->wx = wx; m->wy = wy; m->ww = ww; m->wh = wh;
 }
 
 void
@@ -1730,10 +1754,19 @@ setup(void)
 		const char *at;
 		size_t pre;
 
+		gi = gapinner; go = gapouter; gon = gapsenabled; gsmart = smartgaps;
 		XrmInitialize();
 		if ((rms = XResourceManagerString(dpy)) && (db = XrmGetStringDatabase(rms))) {
 			if (XrmGetResource(db, "dwm.barscale", "Dwm.Barscale", &type, &v) && v.addr)
 				k = atof(v.addr);
+			if (XrmGetResource(db, "dwm.gapinner", "Dwm.Gapinner", &type, &v) && v.addr)
+				gi = atoi(v.addr);
+			if (XrmGetResource(db, "dwm.gapouter", "Dwm.Gapouter", &type, &v) && v.addr)
+				go = atoi(v.addr);
+			if (XrmGetResource(db, "dwm.gaps", "Dwm.Gaps", &type, &v) && v.addr)
+				gon = atoi(v.addr);
+			if (XrmGetResource(db, "dwm.smartgaps", "Dwm.Smartgaps", &type, &v) && v.addr)
+				gsmart = atoi(v.addr);
 			XrmDestroyDatabase(db);
 		}
 		if (k < 0.5 || k > 3.0)
@@ -2405,12 +2438,31 @@ cyclelayout(const Arg *arg)
 void
 runcmd(void)
 {
-	char buf[64], verb[16];
+	char buf[64], verb[16], arg[32];
 	double val;
 	Arg a;
 
-	if (!gettextprop(root, dwmcmd, buf, sizeof buf) || sscanf(buf, "%15s %lf", verb, &val) != 2)
+	if (!gettextprop(root, dwmcmd, buf, sizeof buf) || sscanf(buf, "%15s %31s", verb, arg) != 2)
 		return;
+	val = atof(arg);
+	if (!strcmp(verb, "gaps") || !strcmp(verb, "smartgaps") || !strcmp(verb, "gapinner")
+	|| !strcmp(verb, "gapouter") || !strcmp(verb, "gapsize")) {
+		int *p = !strcmp(verb, "smartgaps") ? &gsmart : &gon;
+		if (!strcmp(verb, "gapinner"))
+			gi = MAX(0, (arg[0] == '+' || arg[0] == '-') ? gi + (int)val : (int)val);
+		else if (!strcmp(verb, "gapouter"))
+			go = MAX(0, (arg[0] == '+' || arg[0] == '-') ? go + (int)val : (int)val);
+		else if (!strcmp(verb, "gapsize")) { /* both at once, relative */
+			gi = MAX(0, gi + (int)val);
+			go = MAX(0, go + (int)val);
+			gon = 1;
+		} else if (!strcmp(arg, "toggle"))
+			*p = !*p;
+		else
+			*p = (int)val ? 1 : 0;
+		arrange(selmon);
+		return;
+	}
 	if (!strcmp(verb, "layout") && val >= 0 && val < LENGTH(layouts) - 1) {
 		a.v = &layouts[(int)val];
 		setlayout(&a);
@@ -2429,16 +2481,16 @@ runcmd(void)
 void
 publishstate(void)
 {
-	char buf[128];
+	char buf[192];
 	unsigned int n = 0;
 	Client *c;
 
 	if (!selmon)
 		return;
 	for (c = nexttiled(selmon->clients); c; c = nexttiled(c->next), n++);
-	snprintf(buf, sizeof buf, "layout=%d symbol=%s mfact=%.2f nmaster=%d windows=%u",
+	snprintf(buf, sizeof buf, "layout=%d symbol=%s mfact=%.2f nmaster=%d windows=%u gaps=%d gapinner=%d gapouter=%d smartgaps=%d",
 		(int)(selmon->lt[selmon->sellt] - layouts), selmon->ltsymbol,
-		selmon->mfact, selmon->nmaster, n);
+		selmon->mfact, selmon->nmaster, n, gon, gi, go, gsmart);
 	XChangeProperty(dpy, root, dwmstate, XA_STRING, 8, PropModeReplace,
 		(unsigned char *)buf, strlen(buf));
 }

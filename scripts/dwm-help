@@ -32,9 +32,11 @@ Mod + Ctrl + Space|Switch to previous layout
 Mod + i  /  Mod + u|More / fewer windows in master
 Mod + Left / Right|Shrink / grow master area
 Scroll on layout symbol|Cycle layouts (bar)
-Mod + a → Windows|Sidebar: layout grid, descriptions, master controls
+Mod + Shift + g|Gaps on / off
+Mod + Shift + ↑ / ↓|Bigger / smaller gaps (inner + outer)
+Mod + a → Windows|Sidebar: layouts, descriptions, master + gap controls
 #Tags (workspaces)
-Workspace apps|1 󰆍 kitty  2 󰖟 Brave  3 󰨞 Code  4 󰉋 Thunar  5 󰇮 Mail  6 󰇈 Obsidian  10 󰑊 OBS
+Workspace apps|1 󰆍 kitty  2 󰖟 Brave  3 󰨞 Code  4 󰉋 Thunar  5 󰇮 Mail  6 󰇈 Obsidian  7 󰕼 VLC  10 󰑊 OBS
 Rules|edit ~/dwm-btw/rules.h (icons: tags.h), then Rebuild
 Mod + & é " '"'"' ( - è _ ç à|Go to tag 1 … 10
 Mod + Shift + & … à|Move window to tag 1 … 10
@@ -49,6 +51,10 @@ Print|Full screen
 Shift + Print|Focused window
 Ctrl + Print|Annotate (flameshot)
 Mod + Print|Screenshot menu (delay, folder…)
+#Wallpaper (~/Pictures/Wallpapers)
+Mod + w|Wallpaper picker: thumbnails, random, add, fit mode, slideshow
+Mod + Shift + w|Next wallpaper
+Mod + a → Wallpaper|Sidebar: preview, prev / random / next, grid, fit, slideshow
 #Colour picker
 Mod + Shift + c|Pick a colour on screen → hex copied to clipboard
 #Monitors

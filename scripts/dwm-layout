@@ -5,6 +5,12 @@
 #   dwm-layout next | prev        cycle layouts                       (Mod+Shift+→ / Mod+Shift+←)
 #   dwm-layout mfact +0.05|-0.05  grow / shrink the master area       (Mod+→ / Mod+←)
 #   dwm-layout nmaster +1|-1      more / fewer windows in the master  (Mod+i / Mod+u)
+#   dwm-layout gaps on|off|toggle  gaps between windows on / off       (Mod+Shift+g)
+#   dwm-layout gaps +2|-2         bigger / smaller gaps (inner + outer) (Mod+Shift+↑ / ↓)
+#   dwm-layout inner N|+N|-N      gap between windows (px)
+#   dwm-layout outer N|+N|-N      gap to the screen edge (px)
+#   dwm-layout smart on|off|toggle no gaps when only one window is open
+#   dwm-layout reset              defaults: tile, 1 master at 55%, gaps on 10/10, smart gaps on
 #   dwm-layout status             e.g. "layout=0 symbol=[]= mfact=0.55 nmaster=1 windows=3"
 #   dwm-layout list               name, symbol, keys and description of every layout
 #   dwm-layout menu               rofi menu with descriptions          (Mod+Shift+l)
@@ -24,6 +30,27 @@ LAYOUTS=(
 	"7~monocle~[M]~Mod+m / Mod+f~Monocle: one window fills the screen, the others wait behind it (Mod+j / Mod+k to flip). Maximum focus; the bar shows how many there are."
 	"8~float~><>~Mod+Shift+→~Floating: windows keep their own size and position, like a classic desktop. Move with Mod+drag, resize with Mod+right-drag."
 )
+
+# gap settings survive restarts and logins: dwm reads them from X resources at start
+persist_gaps() {
+	sleep 0.1
+	local s x="$HOME/.Xresources" k v
+	s=$(state)
+	touch "$x"
+	for k in gaps gapinner gapouter smartgaps; do
+		v=$(sed -n "s/.* $k=\([0-9]*\).*/\1/p" <<<" $s")
+		[ -n "$v" ] || continue
+		if grep -q "^dwm.$k:" "$x"; then sed -i "s/^dwm.$k:.*/dwm.$k: $v/" "$x"; else echo "dwm.$k: $v" >> "$x"; fi
+	done
+	xrdb -merge "$x"
+}
+gapnote() {
+	local s on i o sm
+	s=" $(state)"
+	on=$(sed -n 's/.* gaps=\([0-9]*\).*/\1/p' <<<"$s"); i=$(sed -n 's/.* gapinner=\([0-9]*\).*/\1/p' <<<"$s")
+	o=$(sed -n 's/.* gapouter=\([0-9]*\).*/\1/p' <<<"$s"); sm=$(sed -n 's/.* smartgaps=\([0-9]*\).*/\1/p' <<<"$s")
+	note "Gaps $([ "$on" = 1 ] && echo on || echo off)" "inner ${i}px · outer ${o}px · smart gaps $([ "$sm" = 1 ] && echo on || echo off)"
+}
 
 note() { notify-send -t 1600 -h string:x-dunst-stack-tag:dwm-layout "$@" 2>/dev/null; }
 cmd()  { xprop -root -f _DWM_CMD 8s -set _DWM_CMD "$*"; }
@@ -50,6 +77,25 @@ case $1 in
 	prev) cmd cycle -1; announce ;;
 	mfact) cmd mfact "${2:-+0.05}" ;;
 	nmaster) cmd nmaster "${2:-+1}" ;;
+	gaps)
+		case $2 in
+			on) cmd gaps 1 ;; off) cmd gaps 0 ;; toggle|"") cmd gaps toggle ;;
+			[+-][0-9]*) cmd gapsize "$2" ;;
+			*) echo "gaps on|off|toggle|+N|-N" >&2; exit 1 ;;
+		esac
+		persist_gaps; gapnote ;;
+	inner) cmd gapinner "${2:-+2}"; persist_gaps; gapnote ;;
+	outer) cmd gapouter "${2:-+2}"; persist_gaps; gapnote ;;
+	smart)
+		case $2 in on) cmd smartgaps 1 ;; off) cmd smartgaps 0 ;; *) cmd smartgaps toggle ;; esac
+		persist_gaps; gapnote ;;
+	reset)
+		# defaults = config.h (layouts[0], mfact, nmaster, gapinner/gapouter/gapsenabled/smartgaps)
+		cmd layout 0; cmd mfact 1.55                       # mfact > 1 means absolute (0.55)
+		n=$(state | sed -n 's/.*nmaster=\([0-9]*\).*/\1/p'); cmd nmaster $(( 1 - ${n:-1} ))
+		cmd gapinner 10; cmd gapouter 10; cmd gaps 1; cmd smartgaps 1
+		persist_gaps
+		note "Layout reset" "tile · 1 master at 55% · gaps 10/10 · smart gaps on" ;;
 	status) state ;;
 	list)
 		for i in "${!LAYOUTS[@]}"; do
