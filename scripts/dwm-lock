@@ -5,8 +5,8 @@
 #   dwm-lock render     only (re)build the background image   (--force: ignore the cache)
 #   dwm-lock preview    write the image path (for checking the look without locking)
 #
-# Background per screen: the current wallpaper, blurred + darkened, the profile picture in a
-# Tokyo Night ring, "Locked · <name>", the host name and a hint. i3lock draws its unlock ring in
+# Background per screen: the current wallpaper (lightly blurred) with a frosted-glass card holding
+# the profile picture in a Tokyo Night ring, "Locked · <name>", the host name and a hint. i3lock draws its unlock ring in
 # the middle of every screen and shows the keyboard layout. Notifications pause while locked.
 # The image is cached and only re-rendered when the wallpaper, picture, name or screens change.
 
@@ -30,7 +30,8 @@ rootsize() { xrandr --query | sed -n 's/.*current \([0-9]*\) x \([0-9]*\).*/\1 \
 
 render() {
 	local w face nm host key out
-	w=$(wall); nm=$(name); host=$(cat /etc/hostname 2>/dev/null || uname -n)
+	# DWM_LOCK_WALL: try another image without changing the wallpaper
+	w=${DWM_LOCK_WALL:-$(wall)}; nm=$(name); host=$(cat /etc/hostname 2>/dev/null || uname -n)
 	face=$FACE; [ -f "$face" ] || face=""
 	key=$(printf '%s|%s|%s|%s|%s' "$w" "$(stat -c %Y "$w" 2>/dev/null)" "$(stat -c %Y "$face" 2>/dev/null)" "$nm" "$(screens | tr '\n' ';')" | md5sum | cut -c1-12)
 	out="$CACHE/lock-$key.png"
@@ -42,32 +43,53 @@ render() {
 	local i=0 inputs=() chain="" last="bg"
 	# one finished image per screen
 	while read -r sw sh sx sy; do
-		local cx=$((sw / 2)) cy=$((sh / 2)) av=$((sh / 6)) pic
-		(( av > 220 )) && av=220
-		pic=$((av - 12))
-		# wallpaper: cover the screen, blur, darken
-		ffmpeg -v error -y -i "$w" -vf "scale=${sw}:${sh}:force_original_aspect_ratio=increase,crop=${sw}:${sh},gblur=sigma=28,eq=brightness=-0.18:saturation=0.85" \
+		local cx=$((sw / 2)) cy=$((sh / 2)) av=$((sh / 7)) pic
+		(( av > 190 )) && av=190
+		pic=$((av - 10))
+		# layout (i3lock's ring is ~100px around the centre): picture, name, host above it, hint below
+		local fs=$((sh / 30)) fs2=$((sh / 64))
+		local hosty=$((cy - 125 - fs2)) ty=$((cy - 125 - fs2 - 12 - fs)) ay=$((cy - 125 - fs2 - 12 - fs - 22 - av)) hy=$((cy + 128))
+		# glass card around all of it
+		local cw=$((sh * 9 / 20)) ; (( cw > 600 )) && cw=600 ; (( cw < 380 )) && cw=380
+		local ctop=$((ay - 36)) cbot=$((hy + fs2 + 40)) r=28
+		local ch=$((cbot - ctop)) cxl=$((cx - cw / 2))
+		local rr="if(lte(hypot(max(abs(X-W/2)-(W/2-$r),0),max(abs(Y-H/2)-(H/2-$r),0)),$r),A,0)"
+
+		# 1. wallpaper: cover the screen, light blur, barely darker (stays recognisable)
+		ffmpeg -v error -y -i "$w" -vf "scale=${sw}:${sh}:force_original_aspect_ratio=increase,crop=${sw}:${sh},gblur=sigma=9" \
 			-frames:v 1 "$tmp/bg$i.png"
-		# profile picture: round, inside a blue ring
+		# 2. frosted glass: the same area blurred more, tinted with translucent navy, rounded,
+		#    on a thin light border. The tint adapts: brighter wallpaper behind the card = more navy,
+		#    so the text stays readable on any wallpaper (0.28 on dark ... 0.62 on white), soft contrast.
+		local yavg tint
+		yavg=$(ffmpeg -v info -i "$tmp/bg$i.png" -vf "crop=${cw}:${ch}:${cxl}:${ctop},signalstats,metadata=print:key=lavfi.signalstats.YAVG" -f null - 2>&1 |
+			sed -n 's/.*lavfi.signalstats.YAVG=\([0-9.]*\).*/\1/p' | head -1)
+		tint=$(awk -v y="${yavg:-80}" 'BEGIN{t=0.28+(y/255)*0.34; if(t>0.62)t=0.62; printf "%.2f", t}')
+		ffmpeg -v error -y -i "$tmp/bg$i.png" \
+			-f lavfi -i "color=c=0x24283b@${tint}:s=${cw}x${ch},format=rgba" \
+			-f lavfi -i "color=c=0xc0caf5@0.12:s=$((cw + 2))x$((ch + 2)),format=rgba" -filter_complex "\
+[0]crop=${cw}:${ch}:${cxl}:${ctop},gblur=sigma=26,eq=brightness=0.06:saturation=1.05,noise=alls=5:allf=t,format=rgba[blur];\
+[blur][1]overlay=0:0,format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte(hypot(max(abs(X-W/2)-(W/2-$r),0),max(abs(Y-H/2)-(H/2-$r),0)),$r),255,0)'[card];\
+[2]geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte(hypot(max(abs(X-W/2)-(W/2-$((r + 1))),0),max(abs(Y-H/2)-(H/2-$((r + 1))),0)),$((r + 1))),36,0)'[edge];\
+[0][edge]overlay=$((cxl - 1)):$((ctop - 1))[b1];[b1][card]overlay=${cxl}:${ctop}" \
+			-frames:v 1 "$tmp/glass$i.png"
+		# 3. profile picture: round, inside a blue ring
 		if [ -n "$face" ]; then
 			ffmpeg -v error -y -f lavfi -i "color=c=0x7aa2f7:s=${av}x${av},format=rgba" -i "$face" -filter_complex "\
 [0]geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte(hypot(X-${av}/2,Y-${av}/2),${av}/2),255,0)'[ring];\
 [1]scale=${pic}:${pic}:force_original_aspect_ratio=increase,crop=${pic}:${pic},format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte(hypot(X-${pic}/2,Y-${pic}/2),${pic}/2),255,0)'[pic];\
-[ring][pic]overlay=6:6" -frames:v 1 "$tmp/av$i.png"
+[ring][pic]overlay=5:5" -frames:v 1 "$tmp/av$i.png"
 		fi
-		# compose: picture + texts above the i3lock ring (centre of the screen), hint below it
-		# i3lock's ring is ~100px around the centre: keep everything above cy-120 and the hint below cy+125
-		local fs=$((sh / 26)) fs2=$((sh / 60))
-		local hosty=$((cy - 125 - fs2)) ty=$((cy - 125 - fs2 - 12 - fs)) ay=$((cy - 125 - fs2 - 12 - fs - 18 - av)) hy=$((cy + 130))
+		# 4. texts on the glass
 		local f="[0]null[b]"
 		[ -n "$face" ] && f="[0][1]overlay=$((cx - av / 2)):${ay}[b]"
-		f="$f;[b]drawtext=fontfile='$FONT':text='Locked · ${nm//\'/}':fontcolor=0xc0caf5:fontsize=${fs}:x=(w-tw)/2:y=${ty},\
-drawtext=fontfile='$FONT_R':text='${host//\'/}':fontcolor=0x7aa2f7:fontsize=${fs2}:x=(w-tw)/2:y=${hosty},\
-drawtext=fontfile='$FONT_R':text='type your password to unlock':fontcolor=0xa9b1d6@0.8:fontsize=${fs2}:x=(w-tw)/2:y=${hy}"
+		f="$f;[b]drawtext=fontfile='$FONT':text='Locked · ${nm//\'/}':fontcolor=0xd5dcf5@0.95:fontsize=${fs}:x=(w-tw)/2:y=${ty}:shadowcolor=0x000000@0.18:shadowx=0:shadowy=1,\
+drawtext=fontfile='$FONT_R':text='${host//\'/}':fontcolor=0xa9c1f5@0.9:fontsize=${fs2}:x=(w-tw)/2:y=${hosty},\
+drawtext=fontfile='$FONT_R':text='type your password to unlock':fontcolor=0xd5dcf5@0.8:fontsize=${fs2}:x=(w-tw)/2:y=${hy}"
 		if [ -n "$face" ]; then
-			ffmpeg -v error -y -i "$tmp/bg$i.png" -i "$tmp/av$i.png" -filter_complex "$f" -frames:v 1 "$tmp/s$i.png"
+			ffmpeg -v error -y -i "$tmp/glass$i.png" -i "$tmp/av$i.png" -filter_complex "$f" -frames:v 1 "$tmp/s$i.png"
 		else
-			ffmpeg -v error -y -i "$tmp/bg$i.png" -filter_complex "$f" -frames:v 1 "$tmp/s$i.png"
+			ffmpeg -v error -y -i "$tmp/glass$i.png" -filter_complex "$f" -frames:v 1 "$tmp/s$i.png"
 		fi
 		inputs+=(-i "$tmp/s$i.png")
 		chain+="[$last][$((i + 1))]overlay=${sx}:${sy}[o$i];"
