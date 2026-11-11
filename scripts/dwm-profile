@@ -31,6 +31,8 @@ set_avatar() {
 	[ -f "$f" ] || { note -u critical "Profile" "Not a file: $f"; return 1; }
 	file -b --mime-type "$f" | grep -q '^image/' || { note -u critical "Profile" "Not an image: $f"; return 1; }
 	cp -f "$f" "$FACE" && chmod 644 "$FACE"
+	# login screen (SDDM can't read ~): copy when sudo needs no password, otherwise skip silently
+	sudo -n install -Dm644 "$FACE" "/usr/share/sddm/faces/$USER.face.icon" 2>/dev/null || true
 	FACE_ICON=$FACE note "Profile" "Picture updated"
 }
 

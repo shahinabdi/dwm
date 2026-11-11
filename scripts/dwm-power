@@ -5,7 +5,10 @@
 
 lock() {
 	pgrep -x i3lock >/dev/null && return
-	i3lock -e -f -c 1a1b26 "$@"
+	# dwm-lock: blurred wallpaper, profile picture, name (renders once, then cached)
+	setsid -f "$HOME/.local/bin/dwm-lock" >/dev/null 2>&1 </dev/null
+	# give i3lock time to grab the screen before anything else (e.g. suspend)
+	for _ in $(seq 20); do pgrep -x i3lock >/dev/null && break; sleep 0.1; done
 }
 
 act() {
