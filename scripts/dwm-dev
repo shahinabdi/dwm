@@ -55,7 +55,9 @@ build() {
 	if [ -t 1 ]; then
 		cd "$DWM_DIR" || exit 1
 		echo ":: building dwm in $DWM_DIR"
-		if make clean && make && sudo make install; then
+		kbd=$(dwm-keyboard get profile 2>/dev/null || echo azerty)
+		echo ":: keyboard profile: $kbd  (dwm-keyboard set azerty|qwerty)"
+		if make clean && make KEYBOARD="$kbd" && sudo make install; then
 			echo ":: installed — restarting dwm"; restart
 		else
 			echo ":: build FAILED — dwm not restarted"; note -u critical "dwm" "Build failed (see terminal)"

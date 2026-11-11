@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# dwm-keyboard — keyboard profile of dwm-btw (which keys the workspace / screen shortcuts use).
+#
+#   dwm-keyboard                 show the profile and layouts
+#   dwm-keyboard get profile     azerty | qwerty
+#   dwm-keyboard get layouts     e.g. fr,ir  or  us,ir
+#   dwm-keyboard apply           set the X keyboard layouts from the config (used by ~/.xinitrc)
+#   dwm-keyboard set azerty|qwerty [layouts]
+#                                save the profile, then rebuild + restart dwm (dwm-dev build)
+#
+# Config: ~/.config/dwm-btw.conf
+#   KEYBOARD=azerty        azerty: Mod + & é " ' ( - è _ ç à   ·  qwerty: Mod + 1 … 9 0
+#   LAYOUTS=fr,ir          xkb layouts, Mod+Space cycles through them
+# No config = azerty with fr,ir (the original dwm-btw setup).
+
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/dwm-btw.conf"
+KEYBOARD=azerty
+LAYOUTS=
+# shellcheck disable=SC1090
+[ -f "$CONF" ] && . "$CONF"
+case $KEYBOARD in qwerty) ;; *) KEYBOARD=azerty ;; esac
+if [ -z "$LAYOUTS" ]; then [ "$KEYBOARD" = qwerty ] && LAYOUTS=us,ir || LAYOUTS=fr,ir; fi
+
+case $1 in
+	"")      echo "profile: $KEYBOARD"; echo "layouts: $LAYOUTS"; echo "config:  $CONF$([ -f "$CONF" ] || echo ' (not created, defaults)')" ;;
+	get)     case $2 in profile) echo "$KEYBOARD" ;; layouts) echo "$LAYOUTS" ;; *) echo "usage: dwm-keyboard get profile|layouts" >&2; exit 1 ;; esac ;;
+	apply)   setxkbmap -layout "$LAYOUTS" ;;
+	set)
+		case $2 in azerty|qwerty) ;; *) echo "usage: dwm-keyboard set azerty|qwerty [layouts]" >&2; exit 1 ;; esac
+		lay=${3:-}
+		[ -z "$lay" ] && { [ "$2" = qwerty ] && lay=us,ir || lay=fr,ir; }
+		mkdir -p "$(dirname "$CONF")"
+		printf '# dwm-btw keyboard profile (dwm-keyboard)\nKEYBOARD=%s\nLAYOUTS=%s\n' "$2" "$lay" > "$CONF"
+		echo "saved: KEYBOARD=$2 LAYOUTS=$lay"
+		setxkbmap -layout "$lay" 2>/dev/null
+		[ -n "$DISPLAY" ] && command -v dwm-dev >/dev/null && exec dwm-dev build ;;
+	*) sed -n '2,15p' "$0" >&2; exit 1 ;;
+esac

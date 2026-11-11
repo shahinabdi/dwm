@@ -53,10 +53,11 @@ case $1 in
 	bright-up)   brightnessctl -q set 5%+; osd "Brightness" "$(brightnessctl -m | cut -d, -f4 | tr -d %)" ;;
 	bright-down) brightnessctl -q -n 1% set 5%-; osd "Brightness" "$(brightnessctl -m | cut -d, -f4 | tr -d %)" ;;
 	net-menu)    net_menu ;;
-	kb-reset)    setxkbmap -layout fr,ir; notify-send -t 1500 -h string:x-dunst-stack-tag:dwm-kb "Keyboard" "Layouts reset (fr, ir) — now fr" ;;
+	kb-reset)    lay=$(dwm-keyboard get layouts 2>/dev/null || echo fr,ir); setxkbmap -layout "$lay"
+	             notify-send -t 1500 -h string:x-dunst-stack-tag:dwm-kb "Keyboard" "Layouts reset ($lay) — now ${lay%%,*}" ;;
 	kb-next)     g=$(xkb-group next)
 	             IFS=, read -ra lays <<<"$(setxkbmap -query | awk '/^layout/{print $2}')"
-	             case ${lays[g]} in fr) name="Français" ;; ir) name="فارسی (Persian)" ;; *) name=${lays[g]} ;; esac
+	             case ${lays[g]} in fr) name="Français" ;; us) name="English (US)" ;; gb) name="English (UK)" ;; de) name="Deutsch" ;; ir) name="فارسی (Persian)" ;; *) name=${lays[g]} ;; esac
 	             notify-send -t 1000 -h string:x-dunst-stack-tag:dwm-kb "Keyboard" "${lays[g]}  ·  $name" ;;
 	refresh)     ;;
 	*) echo "usage: dwm-ctl {vol-up|vol-down|vol-mute|mic-mute|mic-up|mic-down|bright-up|bright-down|net-menu|kb-next|kb-reset|refresh}" >&2; exit 1 ;;

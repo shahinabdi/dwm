@@ -39,10 +39,10 @@ Mod + a → Windows|Sidebar: layouts, descriptions, master + gap controls
 #Tags (workspaces)
 Workspace apps|1 󰆍 kitty  2 󰖟 Brave  3 󰨞 Code  4 󰉋 Thunar  5 󰇮 Mail  6 󰇈 Obsidian  7 󰕼 VLC  10 󰑊 OBS
 Rules|edit ~/dwm-btw/rules.h (icons: tags.h), then Rebuild
-Mod + & é " '"'"' ( - è _ ç à|Go to tag 1 … 10
-Mod + Shift + & … à|Move window to tag 1 … 10
-Mod + Ctrl + & … à|Also show tag (toggle)
-Mod + Ctrl + Shift + & … à|Also put window on tag (toggle)
+Mod + @TAGS@|Go to tag 1 … 10
+Mod + Shift + @T1@ … @T10@|Move window to tag 1 … 10
+Mod + Ctrl + @T1@ … @T10@|Also show tag (toggle)
+Mod + Ctrl + Shift + @T1@ … @T10@|Also put window on tag (toggle)
 Mod + s|Show all tags
 Mod + Ctrl + s|Put window on all tags
 Mod + Tab|Previous tag
@@ -59,10 +59,10 @@ Mod + a → Wallpaper|Sidebar: preview, prev / random / next, grid, fit, slidesh
 #Colour picker
 Mod + Shift + c|Pick a colour on screen → hex copied to clipboard
 #Monitors (each screen has its own 10 workspaces)
-Mod + ;  /  Mod + ,|Focus next / previous screen (cycles through all screens)
-Mod + & … à|Workspace 1–10 on the focused screen
-Mod + Shift + ;  /  ,|Move window to next / previous screen
-Example|Workspace 3 on the other screen: Mod + ;  then  Mod + "
+Mod + @MN@  /  Mod + ,|Focus next / previous screen (cycles through all screens)
+Mod + @T1@ … @T10@|Workspace 1–10 on the focused screen
+Mod + Shift + @MN@  /  ,|Move window to next / previous screen
+Example|Workspace 3 on the other screen: Mod + @MN@  then  Mod + @T3@
 Plug in a screen|Applied automatically: saved layout, or extended side by side
 Mod + a → ⚙ → Monitors|Map, on/off, resolution, position, primary, detect, saved layouts
 #Fonts (Nerd Fonts)
@@ -72,8 +72,8 @@ dwm-font menu|Same from rofi (terminal: dwm-font set terminal "FiraCode Nerd Fon
 Volume keys|Volume up / down / mute
 Mic-mute key|Mute microphone (noise-cancelling mic is default)
 Brightness keys|Brightness up / down
-Mod + Space|Switch keyboard layout (fr ⇄ ir Persian)
-Mod + Shift + k|Reset keyboard layouts (back to fr)
+Mod + Space|Switch keyboard layout (@LAYS@)
+Mod + Shift + k|Reset keyboard layouts (back to @L1@)
 Mod + Shift + x|Lock screen
 Mod + Shift + e|Lock + suspend
 Mod + Escape|Power menu (lock, suspend, log out, reboot, shut down)
@@ -87,7 +87,7 @@ Mod + Middle click|Toggle floating
 Click tag|View tag  (right click: also show tag)
 Mod + click tag|Move window to tag
 #Status bar clicks
-Keyboard  󰌌|Left: switch fr ⇄ ir   Right: reset
+Keyboard  󰌌|Left: switch @LAYX@   Right: reset
 Network  󰤨|Left: Wi-Fi menu   Right: nmtui
 Volume  󰕾|Left: mute   Right: mixer   Scroll: volume
 Microphone  󰍬|Left: mute   Right: input devices   Scroll: mic volume
@@ -95,6 +95,19 @@ Brightness  󰃟|Scroll: brightness
 Battery  󰁹|Click: details
 Date  󰃭|Left: calendar
 '
+
+# keys that depend on the keyboard profile (dwm-keyboard / make KEYBOARD=...)
+shopt -u patsub_replacement 2>/dev/null   # "&" in the AZERTY keys must stay literal
+KBD=$(dwm-keyboard get profile 2>/dev/null || echo azerty)
+LAYS=$(dwm-keyboard get layouts 2>/dev/null || echo fr,ir)
+if [ "$KBD" = qwerty ]; then
+	TAGS='1 2 3 4 5 6 7 8 9 0'; T1=1; T3=3; T10=0; MN=.
+else
+	TAGS='& é " '"'"' ( - è _ ç à'; T1='&'; T3='"'; T10='à'; MN=';'
+fi
+KEYS=${KEYS//@TAGS@/$TAGS}; KEYS=${KEYS//@T1@/$T1}; KEYS=${KEYS//@T3@/$T3}; KEYS=${KEYS//@T10@/$T10}
+LAYN=${LAYS//,/ ⇄ }; [[ ,$LAYS, == *,ir,* ]] && LAYN+=" Persian"
+KEYS=${KEYS//@LAYX@/${LAYS//,/ ⇄ }}; KEYS=${KEYS//@MN@/$MN}; KEYS=${KEYS//@LAYS@/$LAYN}; KEYS=${KEYS//@L1@/${LAYS%%,*}}
 
 pad() { local s=$1; printf '%s%*s' "$s" $((34 - ${#s})) ''; }  # pads by characters, not bytes
 

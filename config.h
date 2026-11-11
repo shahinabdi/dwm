@@ -57,6 +57,7 @@ static const Layout layouts[] = {
 };
 
 /* key definitions */
+#include "keyboard.h"   /* workspace / screen keys per keyboard: make KEYBOARD=qwerty */
 #define MODKEY Mod4Mask
 #define TAGKEYS(KEY,TAG) \
 	{ MODKEY,                       KEY,      view,           {.ui = 1 << TAG} }, \
@@ -122,10 +123,10 @@ static const Key keys[] = {
 	{ MODKEY|ShiftMask,             XK_x,      spawn,          SHCMD("dwm-power lock") },
 	{ MODKEY,                       XK_Escape, spawn,          SHCMD("dwm-power menu") },
 	{ MODKEY|ShiftMask,             XK_d,      spawn,          SHCMD("dwm-display menu") },
-	{ MODKEY,                       XK_comma,  focusmon,       {.i = -1 } },
-	{ MODKEY,                       XK_semicolon, focusmon,       {.i = +1 } },
-	{ MODKEY|ShiftMask,             XK_comma,  tagmon,         {.i = -1 } },
-	{ MODKEY|ShiftMask,             XK_semicolon, tagmon,         {.i = +1 } },
+	{ MODKEY,                       KEY_MONPREV, focusmon,     {.i = -1 } },
+	{ MODKEY,                       KEY_MONNEXT, focusmon,     {.i = +1 } },
+	{ MODKEY|ShiftMask,             KEY_MONPREV, tagmon,       {.i = -1 } },
+	{ MODKEY|ShiftMask,             KEY_MONNEXT, tagmon,       {.i = +1 } },
 	{ MODKEY,                       XK_a,      spawn,          SHCMD("qs -c arch-sidebar ipc call sidebar toggle") },
 	{ MODKEY,                       XK_s,      view,           {.ui = ~0 } },
 	{ MODKEY|ControlMask,           XK_s,      tag,            {.ui = ~0 } },
@@ -143,16 +144,16 @@ static const Key keys[] = {
 	{ MODKEY|ShiftMask,             XK_w,      spawn,          SHCMD("dwm-wall next") },
 	/* colour picker */
 	{ MODKEY|ShiftMask,             XK_c,      spawn,          SHCMD("dwm-color") },
-	TAGKEYS(                        XK_ampersand,              0)
-	TAGKEYS(                        XK_eacute,                 1)
-	TAGKEYS(                        XK_quotedbl,               2)
-	TAGKEYS(                        XK_apostrophe,             3)
-	TAGKEYS(                        XK_parenleft,              4)
-	TAGKEYS(                        XK_minus,                  5)
-	TAGKEYS(                        XK_egrave,                 6)
-	TAGKEYS(                        XK_underscore,             7)
-	TAGKEYS(                        XK_ccedilla,               8)
-	TAGKEYS(                        XK_agrave,                 9)
+	TAGKEYS(                        TK1,                      0)
+	TAGKEYS(                        TK2,                      1)
+	TAGKEYS(                        TK3,                      2)
+	TAGKEYS(                        TK4,                      3)
+	TAGKEYS(                        TK5,                      4)
+	TAGKEYS(                        TK6,                      5)
+	TAGKEYS(                        TK7,                      6)
+	TAGKEYS(                        TK8,                      7)
+	TAGKEYS(                        TK9,                      8)
+	TAGKEYS(                        TK10,                      9)
 	{ MODKEY|ShiftMask,             XK_q,      quit,           {0} },
 	{ MODKEY|ControlMask|ShiftMask, XK_q,      restartwm,      {0} },
 	{ 0,              XF86XK_AudioRaiseVolume,  spawn,         {.v = volup } },
