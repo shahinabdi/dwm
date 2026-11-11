@@ -14,13 +14,15 @@
 #
 # Hotplug: udev -> autorandr.service -> "autorandr --change --default horizontal"
 # (known setups get their saved profile, new monitors are extended side by side), then
-# ~/.config/autorandr/postswitch re-applies the wallpaper and refreshes the bar.
+# ~/.config/autorandr/postswitch re-applies the wallpaper, refreshes the bar and re-lays-out the sidebar.
 
 AR="$HOME/.config/autorandr"
 note() { notify-send -t 2500 -h string:x-dunst-stack-tag:dwm-monitor "Monitors" "$*" 2>/dev/null; }
 after() { # things that depend on the screen layout
 	"$HOME/.local/bin/dwm-wall" restore --no-slideshow >/dev/null 2>&1
 	"$HOME/.local/bin/dwm-ctl" refresh >/dev/null 2>&1
+	# sidebar: recompute its position for the new layout (the sidebar itself calls this, so wait for it to close)
+	( sleep 1; qs -c arch-sidebar ipc call sidebar relayout >/dev/null 2>&1 ) &
 }
 primary() { xrandr --query | awk '/ connected primary/{print $1; exit}'; }
 enabled() { xrandr --listactivemonitors | awk 'NR>1{print $NF}'; }

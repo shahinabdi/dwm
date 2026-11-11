@@ -1200,13 +1200,20 @@ manage(Window w, XWindowAttributes *wa)
 		loadtags(c);
 	}
 
-	if (c->x + WIDTH(c) > c->mon->wx + c->mon->ww)
-		c->x = c->mon->wx + c->mon->ww - WIDTH(c);
-	if (c->y + HEIGHT(c) > c->mon->wy + c->mon->wh)
-		c->y = c->mon->wy + c->mon->wh - HEIGHT(c);
-	c->x = MAX(c->x, c->mon->wx);
-	c->y = MAX(c->y, c->mon->wy);
-	c->bw = borderpx;
+	if (getatomprop(c, netatom[NetWMWindowType]) == netatom[NetWMWindowTypeDock]) {
+		/* dwm-btw: a panel keeps the absolute geometry it asks for, on the monitor that geometry
+		 * is on — never clamped into the focused monitor (it would land on the wrong screen) */
+		c->mon = recttomon(c->x, c->y, c->w, c->h);
+		c->bw = 0;
+	} else {
+		if (c->x + WIDTH(c) > c->mon->wx + c->mon->ww)
+			c->x = c->mon->wx + c->mon->ww - WIDTH(c);
+		if (c->y + HEIGHT(c) > c->mon->wy + c->mon->wh)
+			c->y = c->mon->wy + c->mon->wh - HEIGHT(c);
+		c->x = MAX(c->x, c->mon->wx);
+		c->y = MAX(c->y, c->mon->wy);
+		c->bw = borderpx;
+	}
 
 	wc.border_width = c->bw;
 	XConfigureWindow(dpy, w, CWBorderWidth, &wc);
