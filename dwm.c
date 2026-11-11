@@ -41,6 +41,7 @@
 #include <X11/extensions/Xinerama.h>
 #endif /* XINERAMA */
 #include <X11/Xft/Xft.h>
+#include <fribidi.h>
 
 #include "drw.h"
 #include "util.h"
@@ -163,6 +164,7 @@ static void destroynotify(XEvent *e);
 static void detach(Client *c);
 static void detachstack(Client *c);
 static Monitor *dirtomon(int dir);
+static const char *bidi(const char *s, int maxw);
 static void drawbar(Monitor *m);
 static void drawbars(void);
 static void enternotify(XEvent *e);
@@ -882,7 +884,7 @@ drawbar(Monitor *m)
 	if ((w = m->ww - tw - x) > bh) {
 		if (m->sel) {
 			drw_setscheme(drw, scheme[m == selmon ? SchemeSel : SchemeNorm]);
-			drw_text(drw, x, 0, w, bh, lrpad / 2, m->sel->name, 0);
+			drw_text(drw, x, 0, w, bh, lrpad / 2, bidi(m->sel->name, w), 0);
 			if (m->sel->isfloating)
 				drw_rect(drw, x + boxs, boxs, boxw, boxw, m->sel->isfixed, 0);
 		} else {
@@ -891,6 +893,41 @@ drawbar(Monitor *m)
 		}
 	}
 	drw_map(drw, m->barwin, 0, 0, m->ww, bh);
+}
+
+/* dwm-btw: right-to-left text (Persian, Arabic, Hebrew) in the bar. Xft draws glyph by glyph,
+ * left to right, without shaping: reorder to visual order and join Arabic-script letters
+ * (presentation forms) with FriBiDi. maxw > 0: a right-to-left text that is too wide loses the
+ * END of the sentence ("…"), not its beginning (drw_text would cut the visual right side). */
+static const char *
+bidi(const char *s, int maxw)
+{
+	static char out[4 * 256 + 4];
+	FriBidiChar in[256], vis[256];
+	FriBidiParType base;
+	FriBidiStrIndex len, n;
+	const unsigned char *p;
+
+	for (p = (const unsigned char *)s; *p && *p < 0x80; p++);
+	if (!*p)
+		return s;   /* plain ASCII: nothing to do */
+	len = fribidi_charset_to_unicode(FRIBIDI_CHAR_SET_UTF8, s, strnlen(s, 255), in);
+	if (len <= 0 || len > 255)
+		return s;
+	for (n = len; n > 0; n--) {
+		FriBidiChar t[256];
+		memcpy(t, in, n * sizeof(FriBidiChar));
+		if (n < len)
+			t[n] = 0x2026;   /* … at the logical end */
+		base = FRIBIDI_PAR_ON;
+		if (!fribidi_log2vis(t, n + (n < len), &base, vis, NULL, NULL, NULL))
+			return s;
+		fribidi_unicode_to_charset(FRIBIDI_CHAR_SET_UTF8, vis, n + (n < len), out);
+		/* left-to-right text: let drw_text cut it as usual */
+		if (maxw <= 0 || !FRIBIDI_IS_RTL(base) || (int)drw_fontset_getwidth(drw, out) + (int)lrpad <= maxw)
+			return out;
+	}
+	return s;
 }
 
 void
