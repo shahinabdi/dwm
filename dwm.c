@@ -442,18 +442,27 @@ arrangemon(Monitor *m)
 	snprintf(m->ltsymbol, sizeof(m->ltsymbol), "%s", m->lt[m->sellt]->symbol);
 	if (!m->lt[m->sellt]->arrange)
 		return;
-	/* dwm-btw: keep tiled windows out of the space panels reserve (struts are from the screen edge) */
-	for (c = m->clients; c; c = c->next)
-		if (c->isdock && ISVISIBLE(c)) {
-			sl = MAX(sl, c->strut[0]);
-			sr = MAX(sr, c->strut[1]);
-		}
+	/* dwm-btw: keep tiled windows out of the space a panel reserves. Struts are measured from
+	 * the edge of the whole X screen (all monitors), so with several monitors they can't be used
+	 * as-is: a panel that reserves space (strut set) reserves from its own edge to the edge of
+	 * the monitor it is on, and only there. */
+	for (c = m->clients; c; c = c->next) {
+		if (!c->isdock || !ISVISIBLE(c) || c->mon != m)
+			continue;
+		if (c->strut[0] > 0)   /* left panel: up to its right edge */
+			sl = MAX(sl, MIN(m->mw, MAX(0, c->x + WIDTH(c) - m->mx)));
+		if (c->strut[1] > 0)   /* right panel: from its left edge */
+			sr = MAX(sr, MIN(m->mw, MAX(0, m->mx + m->mw - c->x)));
+	}
 	if (sl > m->wx - m->mx) {
 		m->ww -= sl - (m->wx - m->mx);
 		m->wx = m->mx + sl;
 	}
 	if (sr > m->mx + m->mw - (m->wx + m->ww))
 		m->ww = m->mx + m->mw - sr - m->wx;
+	if (m->ww < 50) { /* never leave the windows without room */
+		m->wx = wx; m->ww = ww; sl = sr = 0;
+	}
 	for (n = 0, c = nexttiled(m->clients); c; c = nexttiled(c->next), n++);
 	/* smart gaps: a single window gets no gaps, unless a panel reserves space next to it
 	 * (then the window and the panel are neighbours and keep the gap rules) */
@@ -1792,6 +1801,7 @@ setup(void)
 		static const char *sfonts[LENGTH(fonts)];
 		double k = 1.0;
 		char *rms, *type;
+		static char userfont[128]; /* dwm.font: bar text font family (dwm-font set bar ...) */
 		XrmDatabase db;
 		XrmValue v;
 		const char *at;
@@ -1802,6 +1812,8 @@ setup(void)
 		if ((rms = XResourceManagerString(dpy)) && (db = XrmGetStringDatabase(rms))) {
 			if (XrmGetResource(db, "dwm.barscale", "Dwm.Barscale", &type, &v) && v.addr)
 				k = atof(v.addr);
+			if (XrmGetResource(db, "dwm.font", "Dwm.Font", &type, &v) && v.addr && *v.addr)
+				snprintf(userfont, sizeof userfont, "%s", v.addr);
 			if (XrmGetResource(db, "dwm.gapinner", "Dwm.Gapinner", &type, &v) && v.addr)
 				gi = atoi(v.addr);
 			if (XrmGetResource(db, "dwm.gapouter", "Dwm.Gapouter", &type, &v) && v.addr)
@@ -1815,7 +1827,11 @@ setup(void)
 		if (k < 0.5 || k > 3.0)
 			k = 1.0;
 		for (i = 0; i < LENGTH(fonts); i++) {
-			if ((at = strstr(fonts[i], ":size=")) && (pre = at - fonts[i] + 6) < sizeof scaled[i]) {
+			if (i == 0 && userfont[0] && (at = strstr(fonts[0], ":size="))) {
+				/* bar text font from X resources, keeping the configured (scaled) size */
+				snprintf(scaled[0], sizeof scaled[0], "%s:size=%.1f", userfont, atof(at + 6) * k);
+				sfonts[0] = scaled[0];
+			} else if ((at = strstr(fonts[i], ":size=")) && (pre = at - fonts[i] + 6) < sizeof scaled[i]) {
 				snprintf(scaled[i], sizeof scaled[i], "%.*s%.1f%s", (int)pre, fonts[i],
 					atof(at + 6) * k, at + 6 + strspn(at + 6, "0123456789."));
 				sfonts[i] = scaled[i];

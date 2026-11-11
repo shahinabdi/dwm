@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# dwm-font — Nerd Fonts for dwm-btw: browse the online catalogue, install / remove,
+# and choose the font for the interface, the terminal (kitty) and the dwm bar.
+#
+#   dwm-font catalogue [--refresh]   every Nerd Font of the latest release: name|installed(1/0)|ours(1/0)|sizeMB
+#   dwm-font install <Name>          download + install for this user (~/.local/share/fonts/NerdFonts/<Name>)
+#   dwm-font remove <Name>           remove a font installed by dwm-font
+#   dwm-font families                installed Nerd Font families you can assign
+#   dwm-font current                 interface=… / terminal=… / bar=…
+#   dwm-font set interface|terminal|bar "<Family>"   (bar: "default" = JetBrains Mono + big icons)
+#   dwm-font menu                    rofi: install fonts / pick fonts
+#
+# Interface = GTK (live), Qt / the Quickshell sidebar, rofi, notifications.
+# Terminal  = kitty (live).   Bar = dwm's text font (dwm restarts in place).
+# Sizes are not touched here (Settings → Display → font size).
+
+REPO=ryanoasis/nerd-fonts
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/dwm-font"
+FONTDIR="$HOME/.local/share/fonts/NerdFonts"
+KITTY="$HOME/.config/kitty/kitty.conf"
+GTK3="$HOME/.config/gtk-3.0/settings.ini"
+GTK4="$HOME/.config/gtk-4.0/settings.ini"
+XSET="$HOME/.config/xsettingsd/xsettingsd.conf"
+ROFI="$HOME/.config/rofi/config.rasi"
+DUNST="$HOME/.config/dunst/dunstrc"
+mkdir -p "$CACHE" "$FONTDIR"
+
+note() { notify-send -t 3000 -h string:x-dunst-stack-tag:dwm-font "Fonts" "$*" 2>/dev/null; }
+
+# archive name -> regex for the family names it installs (most are "<Name>NerdFont…")
+family_re() {
+	case $1 in
+		CascadiaCode) echo 'CaskaydiaCove' ;;  CascadiaMono) echo 'CaskaydiaMono' ;;
+		SourceCodePro) echo 'SauceCodePro' ;;  Go-Mono) echo 'GoMono' ;;
+		Meslo) echo 'MesloLG[SML](DZ)?' ;;      BitstreamVeraSansMono) echo 'BitstromWera' ;;
+		DejaVuSansMono) echo 'DejaVuSansM' ;;   LiberationMono) echo 'LiterationMono' ;;
+		Terminus) echo 'Terminess' ;;           ShareTechMono) echo 'ShureTechMono' ;;
+		iA-Writer) echo 'iMWriting(Mono|Quat|Duo)' ;; Monaspace) echo 'Monaspice(Ar|Kr|Ne|Ra|Xe)' ;;
+		AtkinsonHyperlegibleMono) echo 'AtkynsonMono' ;; IntelOneMono) echo 'IntoneMono' ;;
+		ProFont) echo 'ProFont(Windows|IIx)?' ;; OpenDyslexic) echo 'OpenDyslexic(Alt|Mono)?' ;;
+		NerdFontsSymbolsOnly) echo 'Symbols' ;; Hermit) echo 'Hurmit' ;;
+		*) echo "${1//-/}" ;;
+	esac
+}
+
+catalogue_json() { # cached for a day
+	local f="$CACHE/release.json"
+	if [ "$1" = --refresh ] || [ ! -s "$f" ] || [ -n "$(find "$f" -mmin +1440 2>/dev/null)" ]; then
+		curl -fsSL --max-time 20 "https://api.github.com/repos/$REPO/releases/latest" -o "$f.tmp" && mv "$f.tmp" "$f"
+	fi
+	[ -s "$f" ] || { echo "could not reach GitHub (offline?)" >&2; exit 1; }
+	cat "$f"
+}
+
+installed_families() { fc-list : family | sed 's/,.*//' | grep 'Nerd Font' | sort -u; }
+
+catalogue() {
+	local fams; fams=$(installed_families | tr -d ' ')
+	catalogue_json "$1" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+for a in d.get("assets", []):
+    if a["name"].endswith(".tar.xz"):
+        print(a["name"][:-7], round(a["size"] / 1048576, 1))
+' | while read -r name mb; do
+		re=$(family_re "$name")
+		grep -qE "^${re}NerdFont" <<<"$fams" && inst=1 || inst=0
+		[ -d "$FONTDIR/$name" ] && ours=1 || ours=0
+		echo "$name|$inst|$ours|$mb"
+	done
+}
+
+install_font() {
+	local name=$1 tag url tmp
+	tag=$(catalogue_json | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')
+	url="https://github.com/$REPO/releases/download/$tag/$name.tar.xz"
+	tmp=$(mktemp -d)
+	note "Downloading $name…"
+	if ! curl -fsSL --max-time 300 "$url" -o "$tmp/f.tar.xz"; then note "Download failed: $name"; rm -rf "$tmp"; return 1; fi
+	mkdir -p "$FONTDIR/$name"
+	tar -xJf "$tmp/f.tar.xz" -C "$FONTDIR/$name" --wildcards '*.ttf' '*.otf' 2>/dev/null ||
+		tar -xJf "$tmp/f.tar.xz" -C "$FONTDIR/$name"
+	rm -rf "$tmp"
+	find "$FONTDIR/$name" -type f ! -iname '*.ttf' ! -iname '*.otf' -delete
+	fc-cache -f "$FONTDIR" >/dev/null 2>&1
+	note "$name installed ($(find "$FONTDIR/$name" -type f | wc -l) files)"
+}
+
+remove_font() {
+	[ -d "$FONTDIR/$1" ] || { note "$1 was not installed by dwm-font (system package?)"; return 1; }
+	rm -rf "${FONTDIR:?}/$1"; fc-cache -f "$FONTDIR" >/dev/null 2>&1; note "$1 removed"
+}
+
+families() { # base families only (without the Mono / Propo variants)
+	installed_families | grep -vE ' (Mono|Propo)$' | sort -u
+}
+
+current() {
+	echo "interface=$(sed -n 's/^gtk-font-name=\(.*\) [0-9]\+$/\1/p' "$GTK3" | head -1)"
+	echo "terminal=$(awk '/^font_family/{sub(/^font_family[ \t]+/,""); print; exit}' "$KITTY")"
+	echo "bar=$(xrdb -query 2>/dev/null | awk -F':\t' '/^dwm.font:/{print $2}' | grep . || echo 'JetBrains Mono (default)')"
+}
+
+set_font() {
+	local target=$1 fam=$2
+	if [ "$target" = bar ] && [ "$fam" = default ]; then
+		sed -i '/^dwm.font:/d' "$HOME/.Xresources"; xrdb -load "$HOME/.Xresources"; dwm-dev restart >/dev/null 2>&1
+		note "Bar font: default (JetBrains Mono + icons)"; return
+	fi
+	# the family may carry a weight at the end (e.g. "… Mono Ultra-Light"); check the family part
+	local base; base=$(sed -E 's/ (Thin|Ultra-?Light|Extra-?Light|Light|Regular|Medium|Semi-?Bold|Bold|Extra-?Bold|Black)$//' <<<"$fam")
+	fc-list : family | grep -qF "$base" || { note "Font not installed: $fam"; return 1; }
+	case $target in
+		interface)
+			# GTK (settings + live via xsettingsd), Qt (qt5ct/qt6ct), rofi, dunst — sizes kept
+			for f in "$GTK3" "$GTK4"; do [ -f "$f" ] && sed -i -E "s/^(gtk-font-name=).*( [0-9]+)$/\1$fam\2/" "$f"; done
+			[ -f "$XSET" ] && sed -i -E "s/^(Gtk\/FontName \").*( [0-9]+\")$/\1$fam\2/" "$XSET" && pkill -HUP -x xsettingsd
+			for f in "$HOME/.config/qt5ct/qt5ct.conf" "$HOME/.config/qt6ct/qt6ct.conf"; do
+				[ -f "$f" ] && sed -i -E "s/^(general=\")[^,]*(,)/\1$fam\2/" "$f"
+			done
+			[ -f "$ROFI" ] && sed -i -E "s/^(\s*font: \").*( [0-9]+\";)/\1$fam\2/" "$ROFI"
+			[ -f "$DUNST" ] && sed -i -E "s/^(\s*font = ).*( [0-9]+)$/\1$fam\2/" "$DUNST" && { dunstctl reload 2>/dev/null || true; }
+			# the sidebar reads the Qt font at start: restart it (keeps running in the background)
+			if pgrep -f 'qs -c arch-sidebar' >/dev/null; then
+				qs -c arch-sidebar kill >/dev/null 2>&1; sleep 0.4; setsid -f qs -c arch-sidebar >/dev/null 2>&1 </dev/null
+			fi
+			note "Interface font: $fam" ;;
+		terminal)
+			sed -i -E "s/^(font_family[ \t]+).*/\1$fam/" "$KITTY"; pkill -USR1 -x kitty
+			note "Terminal font: $fam" ;;
+		bar)
+			local x="$HOME/.Xresources"
+			touch "$x"
+			if grep -q '^dwm.font:' "$x"; then sed -i "s/^dwm.font:.*/dwm.font: $fam/" "$x"; else echo "dwm.font: $fam" >> "$x"; fi
+			xrdb -merge "$x"; dwm-dev restart >/dev/null 2>&1
+			note "Bar font: $fam" ;;
+		*) echo "set interface|terminal|bar <Family>" >&2; return 1 ;;
+	esac
+}
+
+menu() {
+	local c t f
+	c=$(printf '%s\n' "Interface font" "Terminal font" "Bar font" "Install a Nerd Font…" | rofi -dmenu -i -p "󰛖 fonts" -format i) || exit 0
+	case $c in
+		0|1|2)
+			t=$(echo interface terminal bar | cut -d' ' -f$((c + 1)))
+			f=$(families | rofi -dmenu -i -p "$t font") || exit 0
+			set_font "$t" "$f" ;;
+		3)
+			f=$(catalogue | awk -F'|' '{printf "%s%s  (%s MB)\n", ($2=="1"?"● ":"  "), $1, $4}' |
+				rofi -dmenu -i -p "Nerd Fonts" -mesg "● = installed" ) || exit 0
+			f=${f#● }; f=${f#  }; f=${f%%  (*}
+			install_font "$f" ;;
+	esac
+}
+
+case $1 in
+	catalogue) catalogue "$2" ;;
+	install) install_font "$2" ;;
+	remove) remove_font "$2" ;;
+	families) families ;;
+	current) current ;;
+	set) set_font "$2" "$3" ;;
+	menu|"") menu ;;
+	*) sed -n '2,15p' "$0" >&2; exit 1 ;;
+esac

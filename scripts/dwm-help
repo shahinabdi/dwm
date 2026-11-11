@@ -58,11 +58,16 @@ Mod + Shift + w|Next wallpaper
 Mod + a → Wallpaper|Sidebar: preview, prev / random / next, grid, fit, slideshow
 #Colour picker
 Mod + Shift + c|Pick a colour on screen → hex copied to clipboard
-#Monitors
+#Monitors (each screen has its own 10 workspaces)
+Mod + ;  /  Mod + ,|Focus next / previous screen (cycles through all screens)
+Mod + & … à|Workspace 1–10 on the focused screen
+Mod + Shift + ;  /  ,|Move window to next / previous screen
+Example|Workspace 3 on the other screen: Mod + ;  then  Mod + "
 Plug in a screen|Applied automatically: saved layout, or extended side by side
 Mod + a → ⚙ → Monitors|Map, on/off, resolution, position, primary, detect, saved layouts
-Mod + ,  /  Mod + ;|Focus previous / next monitor
-Mod + Shift + ,  /  ;|Move window to previous / next monitor
+#Fonts (Nerd Fonts)
+Mod + a → ⚙ → Fonts|Interface / terminal / bar font, install fonts from nerdfonts.com
+dwm-font menu|Same from rofi (terminal: dwm-font set terminal "FiraCode Nerd Font")
 #System
 Volume keys|Volume up / down / mute
 Mic-mute key|Mute microphone (noise-cancelling mic is default)
