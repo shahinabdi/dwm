@@ -36,6 +36,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xproto.h>
 #include <X11/Xutil.h>
+#include <X11/Xresource.h>
 #ifdef XINERAMA
 #include <X11/extensions/Xinerama.h>
 #endif /* XINERAMA */
@@ -268,7 +269,8 @@ static void (*handler[LASTEvent]) (XEvent *) = {
 };
 static Atom wmatom[WMLast], netatom[NetLast];
 static int running = 1;
-static int scanning = 0;   /* no switchtotag while re-adopting windows (startup/restart) */
+static int scanning = 0;
+static int barpadk;       /* barpad times dwm.barscale */   /* no switchtotag while re-adopting windows (startup/restart) */
 /* restart in place (dwm-btw): Mod+Ctrl+Shift+q, or SIGHUP (`dwm-dev restart`) */
 static volatile sig_atomic_t restart = 0;
 static Atom dwmtags;
@@ -1707,10 +1709,43 @@ setup(void)
 	sh = DisplayHeight(dpy, screen);
 	root = RootWindow(dpy, screen);
 	drw = drw_create(dpy, screen, root, sw, sh);
-	if (!drw_fontset_create(drw, fonts, LENGTH(fonts)))
+	/* dwm-btw: bar scale from X resources ("dwm.barscale: 1.3" in ~/.Xresources,
+	 * set by `dwm-display bar`). Multiplies every ":size=N" in fonts[] and barpad. */
+	{
+		static char scaled[LENGTH(fonts)][256];
+		static const char *sfonts[LENGTH(fonts)];
+		double k = 1.0;
+		char *rms, *type;
+		XrmDatabase db;
+		XrmValue v;
+		const char *at;
+		size_t pre;
+
+		XrmInitialize();
+		if ((rms = XResourceManagerString(dpy)) && (db = XrmGetStringDatabase(rms))) {
+			if (XrmGetResource(db, "dwm.barscale", "Dwm.Barscale", &type, &v) && v.addr)
+				k = atof(v.addr);
+			XrmDestroyDatabase(db);
+		}
+		if (k < 0.5 || k > 3.0)
+			k = 1.0;
+		for (i = 0; i < LENGTH(fonts); i++) {
+			if ((at = strstr(fonts[i], ":size=")) && (pre = at - fonts[i] + 6) < sizeof scaled[i]) {
+				snprintf(scaled[i], sizeof scaled[i], "%.*s%.1f%s", (int)pre, fonts[i],
+					atof(at + 6) * k, at + 6 + strspn(at + 6, "0123456789."));
+				sfonts[i] = scaled[i];
+			} else {
+				sfonts[i] = fonts[i];
+			}
+		}
+		if (!drw_fontset_create(drw, sfonts, LENGTH(fonts)))
+			die("no fonts could be loaded.");
+		barpadk = (int)(barpad * k + 0.5);
+	}
+	if (0)
 		die("no fonts could be loaded.");
 	lrpad = drw->fonts->h;
-	bh = drw->fonts->h + barpad;
+	bh = drw->fonts->h + barpadk;
 	updategeom();
 	/* init atoms */
 	utf8string = XInternAtom(dpy, "UTF8_STRING", False);

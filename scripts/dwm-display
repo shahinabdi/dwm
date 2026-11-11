@@ -132,13 +132,33 @@ menu() {
 	esac
 }
 
+# dwm bar size multiplier: dwm reads "dwm.barscale" from X resources at (re)start
+barscale() {
+	local k=$1 x="$HOME/.Xresources"
+	[[ $k =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "bar: e.g. 1.0 1.25 1.5" >&2; exit 1; }
+	touch "$x"
+	if grep -q '^dwm.barscale:' "$x"; then sed -i "s/^dwm.barscale:.*/dwm.barscale: $k/" "$x"; else echo "dwm.barscale: $k" >> "$x"; fi
+	xrdb -merge "$x"
+	dwm-dev restart
+	# keep notifications just below the (new) bar
+	sleep 1.2
+	local h d="$HOME/.config/dunst/dunstrc"
+	h=$(xwininfo -root -tree 2>/dev/null | grep -m1 '("dwm" "dwm")' | grep -oE ' [0-9]+x[0-9]+' | cut -dx -f2)
+	if [ -n "$h" ] && [ -f "$d" ]; then
+		sed -i -E "s/^(\s*offset\s*=\s*\(\s*[0-9]+\s*,\s*)[0-9]+(\s*\))/\1$((h + 14))\2/" "$d"
+		dunstctl reload 2>/dev/null
+	fi
+	note "Bar size ${k}×" "dwm restarted in place."
+}
+
 case $1 in
+	bar)      barscale "$2" ;;
 	scale)    scale "$2" ;;
 	font)     font "$2" ;;
 	res)      res "$2" ;;
 	res-menu) res_menu ;;
 	menu|"")  menu ;;
 	apply)    [ "$RES" != auto ] || (( SCALE != 100 )) && apply_mode ;;
-	status)   echo "scale=$SCALE font=$(font_size) res=$(cur_res) modes=$(modes | paste -sd,)" ;;
+	status)   echo "scale=$SCALE bar=$(xrdb -query | awk '/^dwm.barscale:/{print $2}' | grep . || echo 1) barh=$(xwininfo -root -tree 2>/dev/null | grep -m1 '("dwm" "dwm")' | grep -oE ' [0-9]+x[0-9]+' | cut -dx -f2 | grep . || echo 28) font=$(font_size) res=$(cur_res) modes=$(modes | paste -sd,)" ;;
 	*) sed -n '2,12p' "$0" >&2; exit 1 ;;
 esac

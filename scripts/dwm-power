@@ -5,7 +5,7 @@
 
 lock() {
 	pgrep -x i3lock >/dev/null && return
-	i3lock -e -f -c 0b111a "$@"
+	i3lock -e -f -c 1a1b26 "$@"
 }
 
 act() {

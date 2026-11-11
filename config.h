@@ -12,12 +12,12 @@ static const char *fonts[]          = {
 	"JetBrainsMono Nerd Font Propo:size=14",  /* icons: own, bigger size */
 };
 static const char dmenufont[]       = "JetBrainsMono Nerd Font Mono:size=11";
-static const char col_navy1[]       = "#0b111a";
-static const char col_navy2[]       = "#121a26";
-static const char col_steel[]       = "#69a7ff";
-static const char col_text[]        = "#d6deea";
-static const char col_muted[]       = "#7d90ab";
-static const char col_amber[]        = "#e6a567";
+static const char col_navy1[]       = "#16161e";
+static const char col_navy2[]       = "#1a1b26";
+static const char col_steel[]       = "#7aa2f7";
+static const char col_text[]        = "#c0caf5";
+static const char col_muted[]       = "#565f89";
+static const char col_amber[]        = "#e0af68";
 static const char *colors[][3]      = {
 	/*               fg         bg         border   */
 	[SchemeNorm] = { col_muted, col_navy1, col_navy2 },

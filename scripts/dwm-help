@@ -95,7 +95,7 @@ esc() { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' <<<"$1"; }
 while IFS='|' read -r key desc; do
 	[ -z "$key" ] && continue
 	if [[ $key == \#* ]]; then
-		printf '<span foreground="#69a7ff" weight="bold">── %s ──</span>\n' "$(esc "${key#\#}")"
+		printf '<span foreground="#7aa2f7" weight="bold">── %s ──</span>\n' "$(esc "${key#\#}")"
 	else
 		printf '<b>%s</b>  <span foreground="#7d90ab">%s</span>\n' \
 			"$(esc "$(pad "$key")")" "$(esc "$desc")"
