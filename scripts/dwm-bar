@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# dwm-bar — choose which items appear on the right of the dwm bar.
+#
+#   dwm-bar list                 item, shown (1/0), available on this machine (1/0), label
+#   dwm-bar show|hide|toggle <item>
+#   dwm-bar reset                show everything again
+#
+# items: kb net vol mic bright bat clk   (battery / brightness hide by themselves
+#        when the machine has none, e.g. a desktop)
+# Saved in ~/.config/dwm-status.conf, read by dwm-status on every update.
+
+CONF="$HOME/.config/dwm-status.conf"
+ITEMS=(kb net vol mic bright bat clk)
+declare -A LABEL=([kb]="Keyboard layout" [net]="Network" [vol]="Volume" [mic]="Microphone"
+                  [bright]="Brightness" [bat]="Battery" [clk]="Date & time")
+
+for it in "${ITEMS[@]}"; do eval "SHOW_$it=1"; done
+[ -r "$CONF" ] && . "$CONF"
+
+save() { { echo "# dwm-bar: which items the dwm bar shows (0 = hidden)"; for it in "${ITEMS[@]}"; do v="SHOW_$it"; echo "SHOW_$it=${!v}"; done; } > "$CONF"; }
+refresh() { local pf="${XDG_RUNTIME_DIR:-/tmp}/dwm-status.pid"; [ -r "$pf" ] && kill -USR1 "$(cat "$pf")" 2>/dev/null; }
+available() {
+	case $1 in
+		bat)    ls -d /sys/class/power_supply/BAT* >/dev/null 2>&1 ;;
+		bright) ls -d /sys/class/backlight/* >/dev/null 2>&1 ;;
+		*)      true ;;
+	esac
+}
+valid() { [[ " ${ITEMS[*]} " == *" $1 "* ]] || { echo "unknown item: $1 (${ITEMS[*]})" >&2; exit 1; }; }
+
+case $1 in
+	list)
+		for it in "${ITEMS[@]}"; do v="SHOW_$it"; available "$it" && a=1 || a=0; echo "$it ${!v} $a ${LABEL[$it]}"; done ;;
+	show|hide|toggle)
+		valid "$2"; v="SHOW_$2"
+		case $1 in show) printf -v "$v" 1 ;; hide) printf -v "$v" 0 ;; toggle) [ "${!v}" = 0 ] && printf -v "$v" 1 || printf -v "$v" 0 ;; esac
+		save; refresh ;;
+	reset) for it in "${ITEMS[@]}"; do printf -v "SHOW_$it" 1; done; save; refresh ;;
+	*) sed -n '2,12p' "$0" >&2; exit 1 ;;
+esac

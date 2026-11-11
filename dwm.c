@@ -93,6 +93,7 @@ struct Client {
 	int bw, oldbw;
 	unsigned int tags;
 	int isfixed, isfloating, isurgent, neverfocus, oldstate, isfullscreen;
+	int isdock, strut[4]; /* dwm-btw: panel window; reserved left, right, top, bottom (px) */
 	Client *next;
 	Client *snext;
 	Monitor *mon;
@@ -190,6 +191,7 @@ static void pop(Client *c);
 static void propertynotify(XEvent *e);
 static void quit(const Arg *arg);
 static void restartwm(const Arg *arg);
+static void readstrut(Client *c);
 static void cyclelayout(const Arg *arg);
 static void publishstate(void);
 static void runcmd(void);
@@ -275,7 +277,7 @@ static int running = 1;
 static int scanning = 0;
 static int barpadk;       /* barpad times dwm.barscale */
 static int gi, go, gon, gsmart; /* dwm-btw gaps: inner, outer, enabled, smart (from config + X resources) */
-static Atom dwmcmd, dwmstate; /* dwm-btw: commands in (_DWM_CMD), state out (_DWM_STATE) on the root window */   /* no switchtotag while re-adopting windows (startup/restart) */
+static Atom dwmcmd, dwmstate, netstrut, netstrutp; /* dwm-btw: commands in (_DWM_CMD), state out (_DWM_STATE) on the root window */   /* no switchtotag while re-adopting windows (startup/restart) */
 /* restart in place (dwm-btw): Mod+Ctrl+Shift+q, or SIGHUP (`dwm-dev restart`) */
 static volatile sig_atomic_t restart = 0;
 static Atom dwmtags;
@@ -434,29 +436,45 @@ void
 arrangemon(Monitor *m)
 {
 	unsigned int n;
-	int wx, wy, ww, wh, l, r, t, b;
+	int wx = m->wx, wy = m->wy, ww = m->ww, wh = m->wh, l, r, t, b, sl = 0, sr = 0;
 	Client *c;
 
 	snprintf(m->ltsymbol, sizeof(m->ltsymbol), "%s", m->lt[m->sellt]->symbol);
 	if (!m->lt[m->sellt]->arrange)
 		return;
-	for (n = 0, c = nexttiled(m->clients); c; c = nexttiled(c->next), n++);
-	if (!gon || n == 0 || (gsmart && n == 1) || (gi <= 0 && go <= 0)) {
-		m->lt[m->sellt]->arrange(m);
-		return;
+	/* dwm-btw: keep tiled windows out of the space panels reserve (struts are from the screen edge) */
+	for (c = m->clients; c; c = c->next)
+		if (c->isdock && ISVISIBLE(c)) {
+			sl = MAX(sl, c->strut[0]);
+			sr = MAX(sr, c->strut[1]);
+		}
+	if (sl > m->wx - m->mx) {
+		m->ww -= sl - (m->wx - m->mx);
+		m->wx = m->mx + sl;
 	}
-	/* dwm-btw gaps: outer gaps = shrink the work area for the layout,
-	 * inner gaps = half a gap on every edge that does not touch the work area border */
-	wx = m->wx; wy = m->wy; ww = m->ww; wh = m->wh;
-	m->wx += go; m->wy += go; m->ww -= 2 * go; m->wh -= 2 * go;
-	m->lt[m->sellt]->arrange(m);
-	for (c = nexttiled(m->clients); c; c = nexttiled(c->next)) {
-		l = c->x > m->wx + 1 ? gi / 2 : 0;
-		t = c->y > m->wy + 1 ? gi / 2 : 0;
-		r = c->x + WIDTH(c) < m->wx + m->ww - 1 ? gi - gi / 2 : 0;
-		b = c->y + HEIGHT(c) < m->wy + m->wh - 1 ? gi - gi / 2 : 0;
-		if (l || t || r || b)
-			resize(c, c->x + l, c->y + t, MAX(1, c->w - l - r), MAX(1, c->h - t - b), 0);
+	if (sr > m->mx + m->mw - (m->wx + m->ww))
+		m->ww = m->mx + m->mw - sr - m->wx;
+	for (n = 0, c = nexttiled(m->clients); c; c = nexttiled(c->next), n++);
+	/* smart gaps: a single window gets no gaps, unless a panel reserves space next to it
+	 * (then the window and the panel are neighbours and keep the gap rules) */
+	if (!gon || n == 0 || (gsmart && n == 1 && !sl && !sr) || (gi <= 0 && go <= 0)) {
+		m->lt[m->sellt]->arrange(m);
+	} else {
+		/* dwm-btw gaps: outer gaps = shrink the work area for the layout,
+		 * inner gaps = half a gap on every edge that does not touch the work area border */
+		/* next to a panel that reserves space, use the inner gap: the panel is spaced like a window */
+		l = sl > 0 ? gi : go;
+		r = sr > 0 ? gi : go;
+		m->wx += l; m->ww -= l + r; m->wy += go; m->wh -= 2 * go;
+		m->lt[m->sellt]->arrange(m);
+		for (c = nexttiled(m->clients); c; c = nexttiled(c->next)) {
+			l = c->x > m->wx + 1 ? gi / 2 : 0;
+			t = c->y > m->wy + 1 ? gi / 2 : 0;
+			r = c->x + WIDTH(c) < m->wx + m->ww - 1 ? gi - gi / 2 : 0;
+			b = c->y + HEIGHT(c) < m->wy + m->wh - 1 ? gi - gi / 2 : 0;
+			if (l || t || r || b)
+				resize(c, c->x + l, c->y + t, MAX(1, c->w - l - r), MAX(1, c->h - t - b), 0);
+		}
 	}
 	m->wx = wx; m->wy = wy; m->ww = ww; m->wh = wh;
 }
@@ -672,7 +690,23 @@ configurerequest(XEvent *e)
 	if ((c = wintoclient(ev->window))) {
 		if (ev->value_mask & CWBorderWidth)
 			c->bw = ev->border_width;
-		else if (c->isfloating || !selmon->lt[selmon->sellt]->arrange) {
+		else if (c->isdock) {
+			/* dwm-btw: panels ask for absolute screen positions (multi-monitor safe):
+			 * take them as they are, no monitor offset, no re-centering */
+			if (ev->value_mask & CWX) c->x = ev->x;
+			if (ev->value_mask & CWY) c->y = ev->y;
+			if (ev->value_mask & CWWidth) c->w = ev->width;
+			if (ev->value_mask & CWHeight) c->h = ev->height;
+			if ((m = recttomon(c->x, c->y, c->w, c->h)) && m != c->mon) {
+				detach(c); detachstack(c);
+				arrange(c->mon);
+				c->mon = m;
+				attach(c); attachstack(c);
+			}
+			XMoveResizeWindow(dpy, c->win, c->x, c->y, c->w, c->h);
+			readstrut(c);
+			arrange(c->mon);
+		} else if (c->isfloating || !selmon->lt[selmon->sellt]->arrange) {
 			m = c->mon;
 			if (ev->value_mask & CWX) {
 				c->oldx = c->x;
@@ -815,6 +849,8 @@ drawbar(Monitor *m)
 	}
 
 	for (c = m->clients; c; c = c->next) {
+		if (c->isdock)
+			continue; /* panels are on every tag; don't mark them all as occupied */
 		occ |= c->tags;
 		if (c->isurgent)
 			urg |= c->tags;
@@ -943,16 +979,16 @@ focusstack(const Arg *arg)
 	if (!selmon->sel || (selmon->sel->isfullscreen && lockfullscreen))
 		return;
 	if (arg->i > 0) {
-		for (c = selmon->sel->next; c && !ISVISIBLE(c); c = c->next);
+		for (c = selmon->sel->next; c && (!ISVISIBLE(c) || c->isdock); c = c->next);
 		if (!c)
-			for (c = selmon->clients; c && !ISVISIBLE(c); c = c->next);
+			for (c = selmon->clients; c && (!ISVISIBLE(c) || c->isdock); c = c->next);
 	} else {
 		for (i = selmon->clients; i != selmon->sel; i = i->next)
-			if (ISVISIBLE(i))
+			if (ISVISIBLE(i) && !i->isdock)
 				c = i;
 		if (!c)
 			for (; i; i = i->next)
-				if (ISVISIBLE(i))
+				if (ISVISIBLE(i) && !i->isdock)
 					c = i;
 	}
 	if (c) {
@@ -1331,6 +1367,11 @@ propertynotify(XEvent *e)
 		updatestatus();
 	else if (ev->window == root && ev->atom == dwmcmd && ev->state == PropertyNewValue)
 		runcmd();
+	else if ((ev->atom == netstrut || ev->atom == netstrutp)
+	&& (c = wintoclient(ev->window)) && c->isdock) {
+		readstrut(c); /* also on delete: a panel stopped reserving space */
+		arrange(c->mon);
+	}
 	else if (ev->state == PropertyDelete)
 		return; /* ignore */
 	else if ((c = wintoclient(ev->window))) {
@@ -1731,6 +1772,8 @@ setup(void)
 	sigaction(SIGHUP, &sa, NULL);
 	dwmtags = XInternAtom(dpy, "_DWM_TAGS", False);
 	dwmcmd = XInternAtom(dpy, "_DWM_CMD", False);
+	netstrut = XInternAtom(dpy, "_NET_WM_STRUT", False);
+	netstrutp = XInternAtom(dpy, "_NET_WM_STRUT_PARTIAL", False);
 	dwmstate = XInternAtom(dpy, "_DWM_STATE", False);
 
 	/* clean up any zombies (inherited from .xinitrc etc) immediately */
@@ -2299,11 +2342,15 @@ updatewindowtype(Client *c)
 	if (wtype == netatom[NetWMWindowTypeDialog])
 		c->isfloating = 1;
 	if (wtype == netatom[NetWMWindowTypeDock]) {
-		/* panels (e.g. the quickshell sidebar): float borderless at their own geometry */
+		/* panels (e.g. the quickshell sidebar): float borderless at their own geometry,
+		 * on every workspace (never hidden off-screen), reserving their strut */
 		XWindowChanges wc = { .border_width = 0 };
 		c->isfloating = 1;
+		c->isdock = 1;
+		c->tags = TAGMASK;
 		c->bw = 0;
 		XConfigureWindow(dpy, c->win, CWBorderWidth, &wc);
+		readstrut(c);
 	}
 }
 
@@ -2493,6 +2540,32 @@ publishstate(void)
 		selmon->mfact, selmon->nmaster, n, gon, gi, go, gsmart);
 	XChangeProperty(dpy, root, dwmstate, XA_STRING, 8, PropModeReplace,
 		(unsigned char *)buf, strlen(buf));
+}
+
+/* dwm-btw: reserved space of a panel from _NET_WM_STRUT_PARTIAL / _NET_WM_STRUT */
+void
+readstrut(Client *c)
+{
+	Atom type, props[2] = { netstrutp, netstrut };
+	int format, i, k;
+	unsigned long n, extra;
+	unsigned char *p = NULL;
+
+	for (k = 0; k < 4; k++)
+		c->strut[k] = 0;
+	for (i = 0; i < 2; i++) {
+		if (XGetWindowProperty(dpy, c->win, props[i], 0, 12, False, XA_CARDINAL,
+				&type, &format, &n, &extra, &p) == Success && p) {
+			if (format == 32 && n >= 4) {
+				for (k = 0; k < 4; k++)
+					c->strut[k] = (int)((long *)p)[k];
+				XFree(p);
+				return;
+			}
+			XFree(p);
+			p = NULL;
+		}
+	}
 }
 
 int

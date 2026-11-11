@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# dwm-monitor — monitors for dwm-btw (xrandr + autorandr), Sway-like hotplug.
+#
+#   dwm-monitor list                   one line per connected output (used by the sidebar):
+#                                      name|on|primary|WxH|rate|x|y|modes(csv)|model
+#   dwm-monitor on <out> [WxH]         enable (placed right of the primary by default)
+#   dwm-monitor off <out>              disable (never the last enabled one)
+#   dwm-monitor mode <out> <WxH>       resolution (highest refresh rate for it)
+#   dwm-monitor primary <out>          make primary (bar status, sidebar, scaling follow it)
+#   dwm-monitor place <out> left|right|above|below|mirror   relative to the primary
+#   dwm-monitor detect                 apply the saved profile for what is plugged in, else extend
+#   dwm-monitor save [name] | load <name> | delete <name> | profiles
+#   dwm-monitor auto on|off|status     automatic switching on hotplug (autorandr + udev)
+#
+# Hotplug: udev -> autorandr.service -> "autorandr --change --default horizontal"
+# (known setups get their saved profile, new monitors are extended side by side), then
+# ~/.config/autorandr/postswitch re-applies the wallpaper and refreshes the bar.
+
+AR="$HOME/.config/autorandr"
+note() { notify-send -t 2500 -h string:x-dunst-stack-tag:dwm-monitor "Monitors" "$*" 2>/dev/null; }
+after() { # things that depend on the screen layout
+	"$HOME/.local/bin/dwm-wall" restore --no-slideshow >/dev/null 2>&1
+	"$HOME/.local/bin/dwm-ctl" refresh >/dev/null 2>&1
+}
+primary() { xrandr --query | awk '/ connected primary/{print $1; exit}'; }
+enabled() { xrandr --listactivemonitors | awk 'NR>1{print $NF}'; }
+
+list() { # parse xrandr --prop once (EDID -> model name) in python
+	xrandr --prop | python3 -c '
+import sys, re
+outs, cur = [], None
+edid_lines, in_edid = [], False
+def model(hexstr):
+    try:
+        b = bytes.fromhex(hexstr)
+        for i in range(54, 126, 18):             # 4 descriptor blocks
+            d = b[i:i+18]
+            if d[0:3] == b"\0\0\0" and d[3] == 0xFC:
+                return d[5:18].split(b"\n")[0].decode("ascii", "ignore").strip()
+    except Exception:
+        pass
+    return ""
+for line in sys.stdin:
+    m = re.match(r"^(\S+) (connected|disconnected)( primary)?( (\d+)x(\d+)\+(\d+)\+(\d+))?", line)
+    if m:
+        if cur and edid_lines: cur["model"] = model("".join(edid_lines))
+        edid_lines, in_edid = [], False
+        cur = None
+        if m.group(2) == "connected":
+            cur = dict(name=m.group(1), on=1 if m.group(4) else 0, primary=1 if m.group(3) else 0,
+                       mode=f"{m.group(5)}x{m.group(6)}" if m.group(4) else "-", rate="-",
+                       x=m.group(7) or "0", y=m.group(8) or "0", modes=[], model="")
+            outs.append(cur)
+        continue
+    if cur is None: continue
+    s = line.strip()
+    if s.startswith("EDID:"): in_edid = True; continue
+    if in_edid:
+        if re.fullmatch(r"[0-9a-f]{32}", s): edid_lines.append(s); continue
+        in_edid = False
+    mm = re.match(r"^\s{2,3}(\d+x\d+)i?\s+(.*)$", line)
+    if mm and not line.startswith("\t"):
+        res, rates = mm.group(1), mm.group(2)
+        if res not in cur["modes"]: cur["modes"].append(res)
+        if "*" in rates:
+            r = re.search(r"([\d.]+)\*", rates)
+            if r: cur["rate"] = str(round(float(r.group(1))))
+if cur and edid_lines: cur["model"] = model("".join(edid_lines))
+for o in outs:
+    print("|".join([o["name"], str(o["on"]), str(o["primary"]), o["mode"], o["rate"], o["x"], o["y"],
+                    ",".join(o["modes"][:6]), o["model"] or o["name"]]))
+'
+}
+
+best_rate() { # highest refresh rate available for <out> <WxH>
+	xrandr --query | awk -v o="$1" -v m="$2" '$1==o{f=1;next} f&&/^ /&&$1==m{r=0; for(i=2;i<=NF;i++){g=$i; gsub(/[*+]/,"",g); if(g+0>r)r=g+0}; print r; exit} f&&!/^ /{exit}'
+}
+
+case $1 in
+	list) list ;;
+	on)
+		p=$(primary)
+		if [ -n "$3" ]; then xrandr --output "$2" --mode "$3" --right-of "${p:-$2}"
+		else xrandr --output "$2" --auto --right-of "${p:-$2}"; fi
+		after; note "$2 on" ;;
+	off)
+		[ "$(enabled | wc -l)" -le 1 ] && enabled | grep -qx "$2" && { note "$2 is the only screen — not turning it off"; exit 1; }
+		xrandr --output "$2" --off; after; note "$2 off" ;;
+	mode)
+		r=$(best_rate "$2" "$3")
+		xrandr --output "$2" --mode "$3" ${r:+--rate "$r"} && after && note "$2: $3${r:+ @ ${r%.*} Hz}" ;;
+	primary) xrandr --output "$2" --primary; after; note "$2 is now primary" ;;
+	place)
+		p=$(primary)
+		[ "$2" = "$p" ] && { note "$2 is the primary screen; place the other one instead"; exit 1; }
+		case $3 in
+			left)   xrandr --output "$2" --auto --left-of "$p" ;;
+			right)  xrandr --output "$2" --auto --right-of "$p" ;;
+			above)  xrandr --output "$2" --auto --above "$p" ;;
+			below)  xrandr --output "$2" --auto --below "$p" ;;
+			mirror) xrandr --output "$2" --auto --same-as "$p" ;;
+			*) echo "place <out> left|right|above|below|mirror" >&2; exit 1 ;;
+		esac
+		after; note "$2: $3 ${3/mirror/of} $p" ;;
+	detect)
+		autorandr --change --default horizontal --force >/dev/null 2>&1
+		after
+		note "Detected: $(autorandr --current 2>/dev/null | head -1 | grep . || echo 'side by side')" ;;
+	save)
+		name=${2:-$(rofi -dmenu -p "profile name" -mesg "Saves the current monitor layout; it is applied automatically when the same screens are connected" </dev/null)}
+		[ -n "$name" ] || exit 0
+		autorandr --save "$name" --force >/dev/null && note "Profile saved: $name" ;;
+	load) autorandr --load "$2" >/dev/null && after && note "Profile: $2" ;;
+	delete) autorandr --remove "$2" >/dev/null && note "Profile deleted: $2" ;;
+	profiles) autorandr 2>/dev/null | sed -E 's/ \((detected|current)\)/|\1/; s/ \(current\)/|current/' ;;
+	auto)
+		case $2 in
+			off) mkdir -p "$AR"; printf '#!/bin/sh\n# dwm-monitor: automatic switching is off\nexit 0\n' > "$AR/block"; chmod +x "$AR/block"; note "Automatic switching off" ;;
+			on)  rm -f "$AR/block"; note "Automatic switching on" ;;
+			*)   [ -e "$AR/block" ] && echo off || echo on ;;
+		esac ;;
+	*) sed -n '2,18p' "$0" >&2; exit 1 ;;
+esac

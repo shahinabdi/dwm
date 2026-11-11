@@ -55,14 +55,16 @@ mic() {
 }
 
 bright() {
-	local d=/sys/class/backlight/amdgpu_bl1 b m
+	local d b m
+	d=$(ls -d /sys/class/backlight/* 2>/dev/null | head -1)   # any backlight; none on desktops
 	[ -r "$d/brightness" ] || return
 	b=$(<"$d/brightness"); m=$(<"$d/max_brightness")
 	printf '\x05\U000F00DF %s%%\x05' "$((b * 100 / m))"
 }
 
 bat() {
-	local d=/sys/class/power_supply/BAT1 c s icon
+	local d c s icon
+	d=$(ls -d /sys/class/power_supply/BAT* 2>/dev/null | head -1)   # any battery; none on desktops
 	[ -r "$d/capacity" ] || return
 	c=$(<"$d/capacity"); s=$(<"$d/status")
 	local icons=($'\U000F008E' $'\U000F007A' $'\U000F007B' $'\U000F007C' $'\U000F007D' \
@@ -83,8 +85,22 @@ clk() {
 	printf '\x07\U000F00ED %s  \U000F0150 %s\x07' "$(date '+%a %d %b')" "$(date '+%H:%M')"
 }
 
+# which items are shown: ~/.config/dwm-status.conf (SHOW_<item>=0 hides it), managed by dwm-bar
+CONF="$HOME/.config/dwm-status.conf"
+ITEMS=(kb net vol mic bright bat clk)
+
 update() {
-	xsetroot -name " $(kb)$SEP$(net)$SEP$(vol)$SEP$(mic)$SEP$(bright)$SEP$(bat)$SEP$(clk) "
+	local out="" part it var
+	for it in "${ITEMS[@]}"; do eval "SHOW_$it=1"; done
+	[ -r "$CONF" ] && . "$CONF"
+	for it in "${ITEMS[@]}"; do
+		var="SHOW_$it"
+		[ "${!var}" = 0 ] && continue
+		part=$($it)
+		[ -n "$part" ] || continue          # e.g. no battery / backlight: hide automatically
+		out+=${out:+$SEP}$part
+	done
+	xsetroot -name " $out "
 }
 
 trap 'update' USR1

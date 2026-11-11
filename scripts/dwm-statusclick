@@ -17,7 +17,7 @@ case "$1:$BUTTON" in
 	4:5) dwm-ctl mic-down ;;
 	5:4) dwm-ctl bright-up ;;                              # brightness
 	5:5) dwm-ctl bright-down ;;
-	6:*) d=/sys/class/power_supply/BAT1                    # battery details
+	6:*) d=$(ls -d /sys/class/power_supply/BAT* 2>/dev/null | head -1)   # battery details
 	     notify-send "Battery" "$(cat $d/status), $(cat $d/capacity)%" ;;
 	7:1) notify-send "$(date '+%B %Y')" "<tt>$(cal | tail -n +2)</tt>" ;;  # calendar
 esac
