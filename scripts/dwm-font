@@ -6,6 +6,10 @@
 #   dwm-font install <Name>          download + install for this user (~/.local/share/fonts/NerdFonts/<Name>)
 #   dwm-font remove <Name>           remove a font installed by dwm-font
 #   dwm-font families                installed Nerd Font families you can assign
+#   dwm-font families interface|terminal|bar
+#                                    what each target can use: "nerd|<Family>" first, then
+#                                    "system|<Family>" = other installed fonts (interface: all,
+#                                    e.g. Vazirmatn / Inter / Noto Sans; terminal + bar: monospace only)
 #   dwm-font current                 interface=… / terminal=… / bar=…
 #   dwm-font set interface|terminal|bar "<Family>"   (bar: "default" = JetBrains Mono + big icons)
 #   dwm-font menu                    rofi: install fonts / pick fonts
@@ -95,6 +99,16 @@ families() { # base families only (without the Mono / Propo variants)
 	installed_families | grep -vE ' (Mono|Propo)$' | sort -u
 }
 
+# fonts for one target: Nerd Fonts first, then the other installed families
+families_for() {
+	local nerd; nerd=$(families)
+	printf '%s\n' "$nerd" | grep . | sed 's/^/nerd|/'
+	local q=":"; [ "$1" = interface ] || q=":spacing=mono"
+	# first name of each family, no Nerd Fonts, no emoji / symbol-only / icon fonts
+	fc-list "$q" family | sed 's/,.*//' | grep -v 'Nerd Font' |
+		grep -viE 'emoji|symbol|awesome|icons|cursor|^\.|droid sans fallback|^unifont' | sort -u | sed 's/^/system|/'
+}
+
 current() {
 	echo "interface=$(sed -n 's/^gtk-font-name=\(.*\) [0-9]\+$/\1/p' "$GTK3" | head -1)"
 	echo "terminal=$(awk '/^font_family/{sub(/^font_family[ \t]+/,""); print; exit}' "$KITTY")"
@@ -144,7 +158,8 @@ menu() {
 	case $c in
 		0|1|2)
 			t=$(echo interface terminal bar | cut -d' ' -f$((c + 1)))
-			f=$(families | rofi -dmenu -i -p "$t font") || exit 0
+			f=$(families_for "$t" | sed 's/^nerd|//; s/^system|/  /' | rofi -dmenu -i -p "$t font" -mesg "Nerd Fonts first, then other installed fonts") || exit 0
+			f=${f#  }
 			set_font "$t" "$f" ;;
 		3)
 			f=$(catalogue | awk -F'|' '{printf "%s%s  (%s MB)\n", ($2=="1"?"● ":"  "), $1, $4}' |
@@ -158,9 +173,9 @@ case $1 in
 	catalogue) catalogue "$2" ;;
 	install) install_font "$2" ;;
 	remove) remove_font "$2" ;;
-	families) families ;;
+	families) if [ -n "$2" ]; then families_for "$2"; else families; fi ;;
 	current) current ;;
 	set) set_font "$2" "$3" ;;
 	menu|"") menu ;;
-	*) sed -n '2,15p' "$0" >&2; exit 1 ;;
+	*) sed -n '2,19p' "$0" >&2; exit 1 ;;
 esac
