@@ -101,8 +101,13 @@ families() { # base families only (without the Mono / Propo variants)
 
 # fonts for one target: Nerd Fonts first, then the other installed families
 families_for() {
-	local nerd; nerd=$(families)
-	printf '%s\n' "$nerd" | grep . | sed 's/^/nerd|/'
+	local nerd f; nerd=$(families)
+	# terminal / bar need a monospace font: skip proportional Nerd Fonts (Ubuntu, UbuntuSans…)
+	while IFS= read -r f; do
+		[ -n "$f" ] || continue
+		[ "$1" = interface ] || [ -n "$(fc-match -f '%{spacing}' "$f")" ] || continue
+		echo "nerd|$f"
+	done <<<"$nerd"
 	local q=":"; [ "$1" = interface ] || q=":spacing=mono"
 	# first name of each family, no Nerd Fonts, no emoji / symbol-only / icon fonts
 	fc-list "$q" family | sed 's/,.*//' | grep -v 'Nerd Font' |
