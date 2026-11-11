@@ -190,6 +190,9 @@ static void pop(Client *c);
 static void propertynotify(XEvent *e);
 static void quit(const Arg *arg);
 static void restartwm(const Arg *arg);
+static void cyclelayout(const Arg *arg);
+static void publishstate(void);
+static void runcmd(void);
 static void loadtags(Client *c);
 static Monitor *recttomon(int x, int y, int w, int h);
 static void resize(Client *c, int x, int y, int w, int h, int interact);
@@ -270,7 +273,8 @@ static void (*handler[LASTEvent]) (XEvent *) = {
 static Atom wmatom[WMLast], netatom[NetLast];
 static int running = 1;
 static int scanning = 0;
-static int barpadk;       /* barpad times dwm.barscale */   /* no switchtotag while re-adopting windows (startup/restart) */
+static int barpadk;       /* barpad times dwm.barscale */
+static Atom dwmcmd, dwmstate; /* dwm-btw: commands in (_DWM_CMD), state out (_DWM_STATE) on the root window */   /* no switchtotag while re-adopting windows (startup/restart) */
 /* restart in place (dwm-btw): Mod+Ctrl+Shift+q, or SIGHUP (`dwm-dev restart`) */
 static volatile sig_atomic_t restart = 0;
 static Atom dwmtags;
@@ -422,6 +426,7 @@ arrange(Monitor *m)
 		restack(m);
 	} else for (m = mons; m; m = m->next)
 		arrangemon(m);
+	publishstate();
 }
 
 void
@@ -1300,6 +1305,8 @@ propertynotify(XEvent *e)
 
 	if ((ev->window == root) && (ev->atom == XA_WM_NAME))
 		updatestatus();
+	else if (ev->window == root && ev->atom == dwmcmd && ev->state == PropertyNewValue)
+		runcmd();
 	else if (ev->state == PropertyDelete)
 		return; /* ignore */
 	else if ((c = wintoclient(ev->window))) {
@@ -1699,6 +1706,8 @@ setup(void)
 	sa.sa_handler = sighup;
 	sigaction(SIGHUP, &sa, NULL);
 	dwmtags = XInternAtom(dpy, "_DWM_TAGS", False);
+	dwmcmd = XInternAtom(dpy, "_DWM_CMD", False);
+	dwmstate = XInternAtom(dpy, "_DWM_STATE", False);
 
 	/* clean up any zombies (inherited from .xinitrc etc) immediately */
 	while (waitpid(-1, NULL, WNOHANG) > 0);
@@ -2372,6 +2381,66 @@ zoom(const Arg *arg)
 	if (c == nexttiled(selmon->clients) && !(c = nexttiled(c->next)))
 		return;
 	pop(c);
+}
+
+/* ---- dwm-btw: cyclelayout (suckless cyclelayouts patch) ---- */
+void
+cyclelayout(const Arg *arg)
+{
+	const Layout *l;
+	Arg a;
+
+	for (l = layouts; l->symbol && l != selmon->lt[selmon->sellt]; l++);
+	if (arg->i > 0)
+		a.v = (l->symbol && (l + 1)->symbol) ? l + 1 : layouts;
+	else
+		a.v = (l != layouts && (l - 1)->symbol) ? l - 1 : &layouts[LENGTH(layouts) - 2];
+	setlayout(&a);
+}
+
+/* ---- dwm-btw: tiny control channel ----
+ * write:  xprop -root -f _DWM_CMD 8s -set _DWM_CMD "layout 3"
+ *         commands: layout N | cycle +1/-1 | mfact +0.05/-0.05 (1.55 = absolute 0.55) | nmaster +1/-1
+ * read:   xprop -root _DWM_STATE  ->  "layout=0 symbol=[]= mfact=0.55 nmaster=1 windows=3"  */
+void
+runcmd(void)
+{
+	char buf[64], verb[16];
+	double val;
+	Arg a;
+
+	if (!gettextprop(root, dwmcmd, buf, sizeof buf) || sscanf(buf, "%15s %lf", verb, &val) != 2)
+		return;
+	if (!strcmp(verb, "layout") && val >= 0 && val < LENGTH(layouts) - 1) {
+		a.v = &layouts[(int)val];
+		setlayout(&a);
+	} else if (!strcmp(verb, "cycle")) {
+		a.i = val >= 0 ? +1 : -1;
+		cyclelayout(&a);
+	} else if (!strcmp(verb, "mfact")) {
+		a.f = val;
+		setmfact(&a);
+	} else if (!strcmp(verb, "nmaster")) {
+		a.i = (int)val;
+		incnmaster(&a);
+	}
+}
+
+void
+publishstate(void)
+{
+	char buf[128];
+	unsigned int n = 0;
+	Client *c;
+
+	if (!selmon)
+		return;
+	for (c = nexttiled(selmon->clients); c; c = nexttiled(c->next), n++);
+	snprintf(buf, sizeof buf, "layout=%d symbol=%s mfact=%.2f nmaster=%d windows=%u",
+		(int)(selmon->lt[selmon->sellt] - layouts), selmon->ltsymbol,
+		selmon->mfact, selmon->nmaster, n);
+	XChangeProperty(dpy, root, dwmstate, XA_STRING, 8, PropModeReplace,
+		(unsigned char *)buf, strlen(buf));
 }
 
 int

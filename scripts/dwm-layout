@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# dwm-layout — switch and tune dwm layouts from scripts, rofi and the Quickshell sidebar.
+#
+#   dwm-layout set <name|index>   tile bstack centered grid deck spiral dwindle monocle float
+#   dwm-layout next | prev        cycle layouts                       (Mod+Shift+→ / Mod+Shift+←)
+#   dwm-layout mfact +0.05|-0.05  grow / shrink the master area       (Mod+→ / Mod+←)
+#   dwm-layout nmaster +1|-1      more / fewer windows in the master  (Mod+i / Mod+u)
+#   dwm-layout status             e.g. "layout=0 symbol=[]= mfact=0.55 nmaster=1 windows=3"
+#   dwm-layout list               name, symbol, keys and description of every layout
+#   dwm-layout menu               rofi menu with descriptions          (Mod+Shift+l)
+#
+# Talks to dwm through two root-window properties added by the dwm-btw patch:
+#   _DWM_CMD   (we write a command)  ·  _DWM_STATE (dwm writes its state after every change)
+
+# index ~ name ~ symbol ~ keys ~ description   — order must match layouts[] in config.h
+LAYOUTS=(
+	"0~tile~[]=~Mod+t~Master on the left, the other windows stacked on the right. The classic dwm layout: editor or browser big, terminals beside it."
+	"1~bstack~TTT~Mod+Shift+→~Bottom stack: master across the top, the others side by side below. Good on wide screens and for logs under an editor."
+	"2~centered~|M|~Mod+c~Centered master: master in the middle, the others split between left and right. Great on ultrawide monitors and for reading."
+	"3~grid~###~Mod+g~Grid: every window gets an equal cell. Best for watching many terminals or dashboards at once."
+	"4~deck~[D]~Mod+Shift+→~Deck: master on the left, the rest stacked like cards on the right with only the top one visible. Two big windows, the rest one key away."
+	"5~spiral~[@]~Mod+Shift+→~Fibonacci spiral: each new window takes half of the previous one, turning towards the centre. Looks great, focus stays on the big one."
+	"6~dwindle~[\\]~Mod+Shift+→~Fibonacci dwindle: like spiral but always shrinking towards the bottom-right corner. Predictable placement for many windows."
+	"7~monocle~[M]~Mod+m / Mod+f~Monocle: one window fills the screen, the others wait behind it (Mod+j / Mod+k to flip). Maximum focus; the bar shows how many there are."
+	"8~float~><>~Mod+Shift+→~Floating: windows keep their own size and position, like a classic desktop. Move with Mod+drag, resize with Mod+right-drag."
+)
+
+note() { notify-send -t 1600 -h string:x-dunst-stack-tag:dwm-layout "$@" 2>/dev/null; }
+cmd()  { xprop -root -f _DWM_CMD 8s -set _DWM_CMD "$*"; }
+state() { xprop -root _DWM_STATE 2>/dev/null | sed -n 's/^.*= "\(.*\)"$/\1/p'; }
+field() { local f; IFS='~' read -r -a f <<<"${LAYOUTS[$1]}"; echo "${f[$2]}"; }
+index_of() { # name or number -> index
+	local i
+	[[ $1 =~ ^[0-9]+$ ]] && { echo "$1"; return; }
+	for i in "${!LAYOUTS[@]}"; do [ "$(field "$i" 1)" = "$1" ] && { echo "$i"; return; }; done
+	return 1
+}
+announce() { # show the new layout's name and description
+	sleep 0.15
+	local i
+	i=$(state | sed -n 's/.*layout=\([0-9]*\).*/\1/p')
+	[ -n "$i" ] && note "Layout: $(field "$i" 1)  $(field "$i" 2)" "$(field "$i" 4)"
+}
+
+case $1 in
+	set)
+		i=$(index_of "$2") || { echo "unknown layout: $2 (see: dwm-layout list)" >&2; exit 1; }
+		cmd layout "$i"; announce ;;
+	next) cmd cycle 1; announce ;;
+	prev) cmd cycle -1; announce ;;
+	mfact) cmd mfact "${2:-+0.05}" ;;
+	nmaster) cmd nmaster "${2:-+1}" ;;
+	status) state ;;
+	list)
+		for i in "${!LAYOUTS[@]}"; do
+			printf '%-9s %-5s %-14s %s\n' "$(field "$i" 1)" "$(field "$i" 2)" "$(field "$i" 3)" "$(field "$i" 4)"
+		done ;;
+	menu)
+		cur=$(state | sed -n 's/.*layout=\([0-9]*\).*/\1/p')
+		esc() { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' <<<"$1"; }
+		choice=$(for i in "${!LAYOUTS[@]}"; do
+				mark=$([ "$i" = "$cur" ] && echo '●' || echo ' ')
+				printf '<span foreground="#7aa2f7">%s</span>  <b>%-9s</b> <tt>%-5s</tt>  <span foreground="#565f89" size="small">%s</span>\n' \
+					"$mark" "$(field "$i" 1)" "$(esc "$(field "$i" 2)")" "$(esc "$(field "$i" 4)")"
+			done | rofi -dmenu -i -markup-rows -format i -p "󰕰 layout" \
+				-theme-str 'window { width: 1100px; } listview { lines: 9; } element-text { font: "JetBrainsMono Nerd Font Mono 11"; }') || exit 0
+		cmd layout "$choice"; announce ;;
+	*) sed -n '2,12p' "$0" >&2; exit 1 ;;
+esac

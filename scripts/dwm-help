@@ -21,11 +21,18 @@ Mod + q|Close window
 Mod + Shift + Space|Toggle floating
 Mod + Left / Right|Shrink / grow master area
 Mod + i  /  Mod + u|More / fewer windows in master
-#Layouts
-Mod + t|Tiled  []=
-Mod + f  /  Mod + m|Monocle (fullscreen-ish)  [M]
+#Layouts (9, incl. suckless patches)
+Mod + t|Tile  []=   master left, stack right
+Mod + m  /  Mod + f|Monocle  [M]   one window full screen
+Mod + g|Grid  ###   equal cells
+Mod + c|Centered master  |M|
+Mod + Shift + → / ←|Cycle: tile → bstack → centered → grid → deck → spiral → dwindle → monocle → float
+Mod + Shift + l|Layout menu with descriptions (rofi)
 Mod + Ctrl + Space|Switch to previous layout
-Mod + b|Show / hide bar
+Mod + i  /  Mod + u|More / fewer windows in master
+Mod + Left / Right|Shrink / grow master area
+Scroll on layout symbol|Cycle layouts (bar)
+Mod + a → Windows|Sidebar: layout grid, descriptions, master controls
 #Tags (workspaces)
 Workspace apps|1 󰆍 kitty  2 󰖟 Brave  3 󰨞 Code  4 󰉋 Thunar  5 󰇮 Mail  6 󰇈 Obsidian  10 󰑊 OBS
 Rules|edit ~/dwm-btw/rules.h (icons: tags.h), then Rebuild

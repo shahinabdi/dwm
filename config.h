@@ -35,11 +35,21 @@ static const int resizehints = 0;    /* 1 means respect size hints in tiled resi
 static const int lockfullscreen = 1; /* 1 will force focus on the fullscreen window */
 static const int refreshrate = 120;  /* refresh rate (per second) for client move/resize */
 
+#include "layouts.c"   /* bstack, centeredmaster, grid, deck, spiral, dwindle (suckless patches) */
+
+/* index matters: dwm-layout / the sidebar switch by index (keep in sync with scripts/dwm-layout) */
 static const Layout layouts[] = {
 	/* symbol     arrange function */
-	{ "[]=",      tile },    /* first entry is default */
-	{ "><>",      NULL },    /* no layout function means floating behavior */
-	{ "[M]",      monocle },
+	{ "[]=",      tile },           /* 0 tile: master left, stack right (default) */
+	{ "TTT",      bstack },         /* 1 bottom stack: master top, stack below */
+	{ "|M|",      centeredmaster }, /* 2 centered master */
+	{ "###",      grid },           /* 3 grid */
+	{ "[D]",      deck },           /* 4 deck: stack shows one window at a time */
+	{ "[@]",      spiral },         /* 5 fibonacci spiral */
+	{ "[\\]",     dwindle },        /* 6 fibonacci dwindle */
+	{ "[M]",      monocle },        /* 7 monocle: one window fullscreen */
+	{ "><>",      NULL },           /* 8 floating */
+	{ NULL,       NULL },           /* end marker for cyclelayout */
 };
 
 /* key definitions */
@@ -90,8 +100,13 @@ static const Key keys[] = {
 	{ MODKEY,                       XK_Tab,    view,           {0} },
 	{ MODKEY,                       XK_q,      killclient,     {0} },
 	{ MODKEY,                       XK_t,      setlayout,      {.v = &layouts[0]} },
-	{ MODKEY,                       XK_f,      setlayout,      {.v = &layouts[2]} },
-	{ MODKEY,                       XK_m,      setlayout,      {.v = &layouts[2]} },
+	{ MODKEY,                       XK_f,      setlayout,      {.v = &layouts[7]} },
+	{ MODKEY,                       XK_m,      setlayout,      {.v = &layouts[7]} },
+	{ MODKEY,                       XK_g,      setlayout,      {.v = &layouts[3]} },
+	{ MODKEY,                       XK_c,      setlayout,      {.v = &layouts[2]} },
+	{ MODKEY|ShiftMask,             XK_Right,  cyclelayout,    {.i = +1 } },
+	{ MODKEY|ShiftMask,             XK_Left,   cyclelayout,    {.i = -1 } },
+	{ MODKEY|ShiftMask,             XK_l,      spawn,          SHCMD("dwm-layout menu") },
 	{ MODKEY,                       XK_space,  spawn,          SHCMD("dwm-ctl kb-next") },
 	{ MODKEY|ControlMask,           XK_space,  setlayout,      {0} },
 	{ MODKEY|ShiftMask,             XK_space,  togglefloating, {0} },
@@ -146,7 +161,9 @@ static const Key keys[] = {
 static const Button buttons[] = {
 	/* click                event mask      button          function        argument */
 	{ ClkLtSymbol,          0,              Button1,        setlayout,      {0} },
-	{ ClkLtSymbol,          0,              Button3,        setlayout,      {.v = &layouts[2]} },
+	{ ClkLtSymbol,          0,              Button3,        setlayout,      {.v = &layouts[7]} },
+	{ ClkLtSymbol,          0,              Button4,        cyclelayout,    {.i = -1 } },
+	{ ClkLtSymbol,          0,              Button5,        cyclelayout,    {.i = +1 } },
 	{ ClkWinTitle,          0,              Button2,        zoom,           {0} },
 	{ ClkStatusText,        0,              Button1,        statusclick,    {0} },
 	{ ClkStatusText,        0,              Button2,        statusclick,    {0} },

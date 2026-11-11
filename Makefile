@@ -11,7 +11,7 @@ all: dwm
 .c.o:
 	${CC} -c ${CFLAGS} $<
 
-${OBJ}: config.h config.mk tags.h rules.h
+${OBJ}: config.h config.mk tags.h rules.h layouts.c
 
 config.h:
 	cp config.def.h $@
