@@ -115,6 +115,8 @@ static const Key keys[] = {
 	{ ControlMask,                  XK_Print,  spawn,          SHCMD("dwm-shot annotate") },
 	{ MODKEY,                       XK_Print,  spawn,          SHCMD("dwm-shot menu") },
 	{ MODKEY|ShiftMask,             XK_s,      spawn,          SHCMD("dwm-shot region") },
+	/* colour picker */
+	{ MODKEY|ShiftMask,             XK_c,      spawn,          SHCMD("dwm-color") },
 	TAGKEYS(                        XK_ampersand,              0)
 	TAGKEYS(                        XK_eacute,                 1)
 	TAGKEYS(                        XK_quotedbl,               2)

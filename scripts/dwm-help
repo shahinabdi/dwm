@@ -42,6 +42,8 @@ Print|Full screen
 Shift + Print|Focused window
 Ctrl + Print|Annotate (flameshot)
 Mod + Print|Screenshot menu (delay, folder…)
+#Colour picker
+Mod + Shift + c|Pick a colour on screen → hex copied to clipboard
 #Monitors
 Mod + ,  /  Mod + ;|Focus previous / next monitor
 Mod + Shift + ,  /  ;|Move window to previous / next monitor

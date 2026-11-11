@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# dwm-color — pick a colour anywhere on screen (xcolor, with magnifier).    (Mod+Shift+c)
+# The hex code is copied to the clipboard and shown in a notification with a swatch.
+# Esc / right-click cancels.
+
+hex=$(xcolor -f hex -P 171 -S 9) || exit 0
+[ -n "$hex" ] || exit 0
+printf '%s' "$hex" | xclip -selection clipboard
+
+r=$((16#${hex:1:2})) g=$((16#${hex:3:2})) b=$((16#${hex:5:2}))
+swatch="${XDG_RUNTIME_DIR:-/tmp}/dwm-color.svg"
+printf '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="12" fill="%s" stroke="#414868" stroke-width="2"/></svg>\n' "$hex" > "$swatch"
+notify-send -t 4000 -h string:x-dunst-stack-tag:dwm-color -i "$swatch" \
+	"Colour $hex" "rgb($r, $g, $b) — copied to clipboard"
