@@ -1,5 +1,8 @@
 /* rules.h — which app opens on which workspace (included from config.h).
  *
+ * These are the DEFAULTS. Easier: Super+A → ⚙ → Workspaces (or ~/.config/dwm-btw/workspaces.conf,
+ * see `dwm-workspaces`): when that file exists dwm uses it instead, no rebuild needed.
+ *
  * Find an app's class with:  xprop WM_CLASS   (then click the window)
  *   WM_CLASS(STRING) = "instance", "class"
  * class / instance / title are matched as substrings; start with '=' for an exact match

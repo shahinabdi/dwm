@@ -1,4 +1,6 @@
 /* tags.h — workspace names / icons (included from config.h).
+ * DEFAULTS: change them from Super+A → ⚙ → Workspaces (~/.config/dwm-btw/workspaces.conf), no rebuild.
+ * Icons: https://www.nerdfonts.com/cheat-sheet
  * Nerd Font glyphs; keep exactly 10 entries (keys & … à).
  *  1 terminal   2 browser   3 code   4 files   5 mail   6 notes   7 VLC   8-9 free   10 OBS */
 static const char *tags[] = {

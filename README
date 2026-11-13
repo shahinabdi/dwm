@@ -93,3 +93,14 @@ dwm-dev build (Rebuild in the sidebar), dwm-help, dwm-ctl kb-reset and
 Another layout (German QWERTZ, Dvorak...): edit the QWERTY block in
 keyboard.h and build with KEYBOARD=qwerty. Change the keysyms (see /usr/include/X11/keysymdef.h, or run
 `xev` and press the key to see its name).
+
+Workspace icons and app rules
+-----------------------------
+tags.h / rules.h are the defaults. Change them without rebuilding from the sidebar
+(Super+A -> gear -> Workspaces) or with dwm-workspaces; they are saved in
+~/.config/dwm-btw/workspaces.conf, which dwm reads when it starts or restarts in place:
+
+    icon 8 <text or Nerd Font glyph>          (https://www.nerdfonts.com/cheat-sheet)
+    rule <class>|<instance>|<title>|<workspace, 0 = any>|<floating 0/1>|<follow 0/1>
+
+Delete the file (or "Reset to defaults") to go back to tags.h / rules.h.

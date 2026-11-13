@@ -297,6 +297,73 @@ static Window root, wmcheckwin;
 /* compile-time check if all tags fit into an unsigned int bit array. */
 struct NumTags { char limitexceeded[LENGTH(tags) > 31 ? -1 : 1]; };
 
+/* dwm-btw: workspace icons and app rules can come from ~/.config/dwm-btw/workspaces.conf
+ * (sidebar → Workspaces, or by hand; read at start / in-place restart). Without the file the
+ * compiled-in tags.h / rules.h are used.
+ *   icon <1-10> <text or Nerd Font glyph>
+ *   rule <class>|<instance>|<title>|<workspace 0-10, 0 = current>|<floating 0/1>|<follow 0/1> */
+static const char *tagname[LENGTH(tags)];
+static const Rule *wsrules = rules;
+static size_t nwsrules = LENGTH(rules);
+
+static char *
+wsfield(char **p)
+{
+	char *f = strsep(p, "|");
+	if (!f)
+		return NULL;
+	while (*f == ' ' || *f == '\t')
+		f++;
+	for (char *e = f + strlen(f); e > f && (e[-1] == ' ' || e[-1] == '\t'); )
+		*--e = '\0';
+	return *f ? strdup(f) : NULL;
+}
+
+static void
+loadworkspaces(void)
+{
+	char path[512], line[1024], *p, *t;
+	const char *home = getenv("HOME");
+	static Rule rl[256];
+	size_t n = 0, i;
+	FILE *f;
+	int ws, num;
+
+	for (i = 0; i < LENGTH(tags); i++)
+		tagname[i] = tags[i];
+	if (!home)
+		return;
+	snprintf(path, sizeof path, "%s/.config/dwm-btw/workspaces.conf", home);
+	if (!(f = fopen(path, "r")))
+		return;
+	while (fgets(line, sizeof line, f)) {
+		line[strcspn(line, "\n")] = '\0';
+		if (!strncmp(line, "icon ", 5) && sscanf(line + 5, "%d", &num) == 1
+		&& num >= 1 && num <= (int)LENGTH(tags)) {
+			for (t = line + 5; *t && *t != ' '; t++);
+			while (*t == ' ')
+				t++;
+			if (*t)
+				tagname[num - 1] = strdup(t);
+		} else if (!strncmp(line, "rule ", 5) && n < LENGTH(rl)) {
+			p = line + 5;
+			rl[n].class = wsfield(&p);
+			rl[n].instance = wsfield(&p);
+			rl[n].title = wsfield(&p);
+			t = wsfield(&p); ws = t ? atoi(t) : 0; free(t);
+			rl[n].tags = ws >= 1 && ws <= (int)LENGTH(tags) ? 1 << (ws - 1) : 0;
+			t = wsfield(&p); rl[n].isfloating = t ? atoi(t) : 0; free(t);
+			t = wsfield(&p); rl[n].switchtotag = t ? atoi(t) : 1; free(t);
+			rl[n].monitor = -1;
+			if (rl[n].class || rl[n].instance || rl[n].title)
+				n++;
+		}
+	}
+	fclose(f);
+	wsrules = rl;
+	nwsrules = n;
+}
+
 /* function implementations */
 /* rule match: substring, or exact when the pattern starts with '=' (dwm-btw) */
 static int
@@ -322,8 +389,8 @@ applyrules(Client *c)
 	class    = ch.res_class ? ch.res_class : broken;
 	instance = ch.res_name  ? ch.res_name  : broken;
 
-	for (i = 0; i < LENGTH(rules); i++) {
-		r = &rules[i];
+	for (i = 0; i < nwsrules; i++) {
+		r = &wsrules[i];
 		if ((!r->title || rulematch(c->name, r->title))
 		&& (!r->class || rulematch(class, r->class))
 		&& (!r->instance || rulematch(instance, r->instance)))
@@ -523,7 +590,7 @@ buttonpress(XEvent *e)
 	if (ev->window == selmon->barwin) {
 		i = x = 0;
 		do
-			x += TEXTW(tags[i]);
+			x += TEXTW(tagname[i]);
 		while (ev->x >= x && ++i < LENGTH(tags));
 		if (i < LENGTH(tags)) {
 			click = ClkTagBar;
@@ -868,9 +935,9 @@ drawbar(Monitor *m)
 	}
 	x = 0;
 	for (i = 0; i < LENGTH(tags); i++) {
-		w = TEXTW(tags[i]);
+		w = TEXTW(tagname[i]);
 		drw_setscheme(drw, scheme[m->tagset[m->seltags] & 1 << i ? SchemeSel : SchemeNorm]);
-		drw_text(drw, x, 0, w, bh, lrpad / 2, tags[i], urg & 1 << i);
+		drw_text(drw, x, 0, w, bh, lrpad / 2, tagname[i], urg & 1 << i);
 		if (occ & 1 << i)
 			drw_rect(drw, x + boxs, boxs, boxw, boxw,
 				m == selmon && selmon->sel && selmon->sel->tags & 1 << i,
@@ -1817,6 +1884,8 @@ setup(void)
 	sa.sa_flags = SA_NOCLDSTOP | SA_NOCLDWAIT | SA_RESTART;
 	sa.sa_handler = SIG_IGN;
 	sigaction(SIGCHLD, &sa, NULL);
+
+	loadworkspaces();
 
 	/* SIGHUP = restart in place */
 	sigemptyset(&sa.sa_mask);

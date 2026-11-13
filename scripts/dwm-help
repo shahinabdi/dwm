@@ -66,6 +66,7 @@ Example|Workspace 3 on the other screen: Mod + @MN@  then  Mod + @T3@
 Plug in a screen|Applied automatically: saved layout, or extended side by side
 Mod + a → ⚙ → Monitors|Map, on/off, resolution, position, primary, detect, saved layouts
 #Fonts (Nerd Fonts)
+Mod + a → ⚙ → Workspaces|Workspace icons + which apps open where (add / edit / remove, no rebuild)
 Mod + a → ⚙ → Fonts|Interface / terminal / bar font, install fonts from nerdfonts.com
 dwm-font menu|Same from rofi (terminal: dwm-font set terminal "FiraCode Nerd Font")
 #System
