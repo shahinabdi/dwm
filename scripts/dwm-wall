@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dwm-wall — wallpaper manager for dwm-btw (feh).
+# dwm-wall — wallpaper manager for Lunaris (feh).
 #
 #   dwm-wall menu                  rofi picker with thumbnails + actions        (Mod+w)
 #   dwm-wall next | prev | random  cycle through the wallpaper folder          (Mod+Shift+w = next)

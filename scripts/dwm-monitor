@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dwm-monitor — monitors for dwm-btw (xrandr + autorandr), Sway-like hotplug.
+# dwm-monitor — monitors for Lunaris (xrandr + autorandr), Sway-like hotplug.
 #
 #   dwm-monitor list                   one line per connected output (used by the sidebar):
 #                                      name|on|primary|WxH|rate|x|y|modes(csv)|model

@@ -38,7 +38,7 @@ Mod + Shift + ↑ / ↓|Bigger / smaller gaps (inner + outer)
 Mod + a → Windows|Sidebar: layouts, descriptions, master + gap controls
 #Tags (workspaces)
 Workspace apps|1 󰆍 kitty  2 󰖟 Brave  3 󰨞 Code  4 󰉋 Thunar  5 󰇮 Mail  6 󰇈 Obsidian  7 󰕼 VLC  10 󰑊 OBS
-Rules|edit ~/dwm-btw/rules.h (icons: tags.h), then Rebuild
+Rules|Mod + a → ⚙ → Workspaces (or rules.h / tags.h in the dwm source, then Rebuild)
 Mod + @TAGS@|Go to tag 1 … 10
 Mod + Shift + @T1@ … @T10@|Move window to tag 1 … 10
 Mod + Ctrl + @T1@ … @T10@|Also show tag (toggle)
@@ -66,6 +66,7 @@ Example|Workspace 3 on the other screen: Mod + @MN@  then  Mod + @T3@
 Plug in a screen|Applied automatically: saved layout, or extended side by side
 Mod + a → ⚙ → Monitors|Map, on/off, resolution, position, primary, detect, saved layouts
 #Fonts (Nerd Fonts)
+Mod + a → ⚙ → Updates|Lunaris version, check now, update (also checked every Tuesday)
 Mod + a → ⚙ → Workspaces|Workspace icons + which apps open where (add / edit / remove, no rebuild)
 Mod + a → ⚙ → Fonts|Interface / terminal / bar font, install fonts from nerdfonts.com
 dwm-font menu|Same from rofi (terminal: dwm-font set terminal "FiraCode Nerd Font")

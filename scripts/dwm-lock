@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dwm-lock — lock screen for dwm-btw (i3lock + a rendered background), matches the SDDM login screen.
+# dwm-lock — lock screen for Lunaris (i3lock + a rendered background), matches the SDDM login screen.
 #
 #   dwm-lock            lock now (Mod+Shift+x, Lock in the sidebar / power menu)
 #   dwm-lock render     only (re)build the background image   (--force: ignore the cache)
@@ -18,7 +18,7 @@ FONT_R=$(fc-match -f '%{file}' 'JetBrainsMono Nerd Font:style=Regular' 2>/dev/nu
 
 wall() { # current wallpaper (dwm-wall), else the one from the dwm repo
 	local w; w=$("$HOME/.local/bin/dwm-wall" current 2>/dev/null)
-	[ -f "$w" ] || w="$HOME/dwm-btw/current.jpg"
+	[ -f "$w" ] || w="$HOME/Pictures/Wallpapers/mountain-lake.jpg"
 	echo "$w"
 }
 name() {

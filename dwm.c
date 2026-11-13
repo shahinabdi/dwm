@@ -94,7 +94,7 @@ struct Client {
 	int bw, oldbw;
 	unsigned int tags;
 	int isfixed, isfloating, isurgent, neverfocus, oldstate, isfullscreen;
-	int isdock, strut[4]; /* dwm-btw: panel window; reserved left, right, top, bottom (px) */
+	int isdock, strut[4]; /* Lunaris: panel window; reserved left, right, top, bottom (px) */
 	Client *next;
 	Client *snext;
 	Monitor *mon;
@@ -141,7 +141,7 @@ typedef struct {
 	unsigned int tags;
 	int isfloating;
 	int monitor;
-	int switchtotag;   /* dwm-btw: jump to the rule's tag when the window opens */
+	int switchtotag;   /* Lunaris: jump to the rule's tag when the window opens */
 } Rule;
 
 /* function declarations */
@@ -278,9 +278,9 @@ static Atom wmatom[WMLast], netatom[NetLast];
 static int running = 1;
 static int scanning = 0;
 static int barpadk;       /* barpad times dwm.barscale */
-static int gi, go, gon, gsmart; /* dwm-btw gaps: inner, outer, enabled, smart (from config + X resources) */
-static Atom dwmcmd, dwmstate, netstrut, netstrutp; /* dwm-btw: commands in (_DWM_CMD), state out (_DWM_STATE) on the root window */   /* no switchtotag while re-adopting windows (startup/restart) */
-/* restart in place (dwm-btw): Mod+Ctrl+Shift+q, or SIGHUP (`dwm-dev restart`) */
+static int gi, go, gon, gsmart; /* Lunaris gaps: inner, outer, enabled, smart (from config + X resources) */
+static Atom dwmcmd, dwmstate, netstrut, netstrutp; /* Lunaris: commands in (_DWM_CMD), state out (_DWM_STATE) on the root window */   /* no switchtotag while re-adopting windows (startup/restart) */
+/* restart in place (Lunaris): Mod+Ctrl+Shift+q, or SIGHUP (`dwm-dev restart`) */
 static volatile sig_atomic_t restart = 0;
 static Atom dwmtags;
 const char dwm_btw_restart_marker[] = "dwm-btw-restart-capable";
@@ -297,7 +297,7 @@ static Window root, wmcheckwin;
 /* compile-time check if all tags fit into an unsigned int bit array. */
 struct NumTags { char limitexceeded[LENGTH(tags) > 31 ? -1 : 1]; };
 
-/* dwm-btw: workspace icons and app rules can come from ~/.config/dwm-btw/workspaces.conf
+/* Lunaris: workspace icons and app rules can come from ~/.config/dwm-btw/workspaces.conf
  * (sidebar → Workspaces, or by hand; read at start / in-place restart). Without the file the
  * compiled-in tags.h / rules.h are used.
  *   icon <1-10> <text or Nerd Font glyph>
@@ -365,7 +365,7 @@ loadworkspaces(void)
 }
 
 /* function implementations */
-/* rule match: substring, or exact when the pattern starts with '=' (dwm-btw) */
+/* rule match: substring, or exact when the pattern starts with '=' (Lunaris) */
 static int
 rulematch(const char *s, const char *pat)
 {
@@ -409,7 +409,7 @@ applyrules(Client *c)
 	if (ch.res_name)
 		XFree(ch.res_name);
 	c->tags = c->tags & TAGMASK ? c->tags & TAGMASK : c->mon->tagset[c->mon->seltags];
-	/* dwm-btw: follow the app to its workspace */
+	/* Lunaris: follow the app to its workspace */
 	switchto &= TAGMASK;
 	if (switchto && !scanning && c->mon == selmon
 	&& !(switchto & selmon->tagset[selmon->seltags])) {
@@ -511,7 +511,7 @@ arrangemon(Monitor *m)
 	snprintf(m->ltsymbol, sizeof(m->ltsymbol), "%s", m->lt[m->sellt]->symbol);
 	if (!m->lt[m->sellt]->arrange)
 		return;
-	/* dwm-btw: keep tiled windows out of the space a panel reserves. Struts are measured from
+	/* Lunaris: keep tiled windows out of the space a panel reserves. Struts are measured from
 	 * the edge of the whole X screen (all monitors), so with several monitors they can't be used
 	 * as-is: a panel that reserves space (strut set) reserves from its own edge to the edge of
 	 * the monitor it is on, and only there. */
@@ -538,7 +538,7 @@ arrangemon(Monitor *m)
 	if (!gon || n == 0 || (gsmart && n == 1 && !sl && !sr) || (gi <= 0 && go <= 0)) {
 		m->lt[m->sellt]->arrange(m);
 	} else {
-		/* dwm-btw gaps: outer gaps = shrink the work area for the layout,
+		/* Lunaris gaps: outer gaps = shrink the work area for the layout,
 		 * inner gaps = half a gap on every edge that does not touch the work area border */
 		/* next to a panel that reserves space, use the inner gap: the panel is spaced like a window */
 		l = sl > 0 ? gi : go;
@@ -769,7 +769,7 @@ configurerequest(XEvent *e)
 		if (ev->value_mask & CWBorderWidth)
 			c->bw = ev->border_width;
 		else if (c->isdock) {
-			/* dwm-btw: panels ask for absolute screen positions (multi-monitor safe):
+			/* Lunaris: panels ask for absolute screen positions (multi-monitor safe):
 			 * take them as they are, no monitor offset, no re-centering */
 			if (ev->value_mask & CWX) c->x = ev->x;
 			if (ev->value_mask & CWY) c->y = ev->y;
@@ -962,7 +962,7 @@ drawbar(Monitor *m)
 	drw_map(drw, m->barwin, 0, 0, m->ww, bh);
 }
 
-/* dwm-btw: right-to-left text (Persian, Arabic, Hebrew) in the bar. Xft draws glyph by glyph,
+/* Lunaris: right-to-left text (Persian, Arabic, Hebrew) in the bar. Xft draws glyph by glyph,
  * left to right, without shaping: reorder to visual order and join Arabic-script letters
  * (presentation forms) with FriBiDi. maxw > 0: a right-to-left text that is too wide loses the
  * END of the sentence ("…"), not its beginning (drw_text would cut the visual right side). */
@@ -1305,7 +1305,7 @@ manage(Window w, XWindowAttributes *wa)
 	}
 
 	if (getatomprop(c, netatom[NetWMWindowType]) == netatom[NetWMWindowTypeDock]) {
-		/* dwm-btw: a panel keeps the absolute geometry it asks for, on the monitor that geometry
+		/* Lunaris: a panel keeps the absolute geometry it asks for, on the monitor that geometry
 		 * is on — never clamped into the focused monitor (it would land on the wrong screen) */
 		c->mon = recttomon(c->x, c->y, c->w, c->h);
 		c->bw = 0;
@@ -1907,7 +1907,7 @@ setup(void)
 	sh = DisplayHeight(dpy, screen);
 	root = RootWindow(dpy, screen);
 	drw = drw_create(dpy, screen, root, sw, sh);
-	/* dwm-btw: bar scale from X resources ("dwm.barscale: 1.3" in ~/.Xresources,
+	/* Lunaris: bar scale from X resources ("dwm.barscale: 1.3" in ~/.Xresources,
 	 * set by `dwm-display bar`). Multiplies every ":size=N" in fonts[] and barpad. */
 	{
 		static char scaled[LENGTH(fonts)][256];
@@ -2592,7 +2592,7 @@ zoom(const Arg *arg)
 	pop(c);
 }
 
-/* ---- dwm-btw: cyclelayout (suckless cyclelayouts patch) ---- */
+/* ---- Lunaris: cyclelayout (suckless cyclelayouts patch) ---- */
 void
 cyclelayout(const Arg *arg)
 {
@@ -2607,7 +2607,7 @@ cyclelayout(const Arg *arg)
 	setlayout(&a);
 }
 
-/* ---- dwm-btw: tiny control channel ----
+/* ---- Lunaris: tiny control channel ----
  * write:  xprop -root -f _DWM_CMD 8s -set _DWM_CMD "layout 3"
  *         commands: layout N | cycle +1/-1 | mfact +0.05/-0.05 (1.55 = absolute 0.55) | nmaster +1/-1
  * read:   xprop -root _DWM_STATE  ->  "layout=0 symbol=[]= mfact=0.55 nmaster=1 windows=3"  */
@@ -2671,7 +2671,7 @@ publishstate(void)
 		(unsigned char *)buf, strlen(buf));
 }
 
-/* dwm-btw: reserved space of a panel from _NET_WM_STRUT_PARTIAL / _NET_WM_STRUT */
+/* Lunaris: reserved space of a panel from _NET_WM_STRUT_PARTIAL / _NET_WM_STRUT */
 void
 readstrut(Client *c)
 {

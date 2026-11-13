@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dwm-shot — screenshot manager for dwm-btw (X11: maim + xclip, flameshot for annotating).
+# dwm-shot — screenshot manager for Lunaris (X11: maim + xclip, flameshot for annotating).
 # Every shot is saved to ~/Pictures/Screenshots and copied to the clipboard.
 #
 #   dwm-shot full      whole screen               (Print)

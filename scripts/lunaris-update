@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+# lunaris-update — check for and install Lunaris updates (both repos: lunaris + lunaris-dwm).
+#
+#   lunaris-update                     same as status
+#   lunaris-update status              result of the last check (key=value lines)
+#   lunaris-update check [--notify]    fetch both repos, compare, save the result;
+#                                      --notify: a notification (with an Update button) when there is one
+#   lunaris-update notes               what's new (changelog of the newer versions)
+#   lunaris-update apply [--dry-run]   pull both repos, redeploy the configs that changed, rebuild dwm if
+#                                      its source changed (asks for your password), restart dwm in place
+#   lunaris-update gui                 run "apply" in a terminal window (sidebar / notification button)
+#   lunaris-update timer on|off|status the automatic check every Tuesday
+#
+# Local changes are never overwritten: a repo with uncommitted changes stops the update.
+# Config files you edited are backed up as <file>.bak-<date> before an updated version replaces them.
+# Folders: ~/.config/lunaris.conf (LUNARIS_DIR, written by install.sh) and ~/.config/dwm-dev.conf (DWM_DIR).
+
+set -uo pipefail
+shopt -u patsub_replacement 2>/dev/null
+
+CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/lunaris
+STATE=$CACHE/update.state
+NOTES=$CACHE/update-notes.md
+STAMP=$(date +%Y%m%d-%H%M%S)
+DRY=0
+
+LUNARIS_DIR="" DWM_DIR=""
+[ -r "$HOME/.config/lunaris.conf" ] && . "$HOME/.config/lunaris.conf"
+[ -r "$HOME/.config/dwm-dev.conf" ] && . "$HOME/.config/dwm-dev.conf"
+LUNARIS_DIR=${LUNARIS_DIR:-$HOME/lunaris}
+DWM_DIR=${DWM_DIR:-$HOME/lunaris-dwm}
+
+c_blue=$'\e[1;34m' c_green=$'\e[1;32m' c_yel=$'\e[1;33m' c_red=$'\e[1;31m' c_off=$'\e[0m'
+say()  { printf '%s==>%s %s\n' "$c_blue" "$c_off" "$*"; }
+info() { printf '    %s\n' "$*"; }
+warn() { printf '%s  ! %s%s\n' "$c_yel" "$*" "$c_off"; }
+run()  { if (( DRY )); then printf '    [dry] %s\n' "$*"; else "$@"; fi; }
+note() { notify-send -a Lunaris -h string:x-dunst-stack-tag:lunaris-update "$@" 2>/dev/null; }
+
+isrepo() { [ -d "$1/.git" ]; }
+upstream() { git -C "$1" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || echo origin/main; }
+# uncommitted changes (build outputs of dwm don't count)
+dirty() { [ -n "$(git -C "$1" status --porcelain --untracked-files=no -- . ':!dwm' ':!*.o' 2>/dev/null)" ]; }
+version_at() { git -C "$LUNARIS_DIR" describe --tags --abbrev=0 "$1" 2>/dev/null | sed 's/^v//'; }
+
+state_get() { sed -n "s/^$1=//p" "$STATE" 2>/dev/null | head -1; }
+
+# ---------------------------------------------------------------- check
+check() {
+	local notify=0 err="" name dir up behind total=0 dwm_b=0 desk_b=0 cur latest title=""
+	[ "${1:-}" = --notify ] && notify=1
+	mkdir -p "$CACHE"
+	for name in lunaris lunaris-dwm; do
+		[ $name = lunaris ] && dir=$LUNARIS_DIR || dir=$DWM_DIR
+		if ! isrepo "$dir"; then err="not a git folder: $dir"; continue; fi
+		if ! timeout 60 git -C "$dir" fetch --quiet --tags origin 2>/dev/null; then err="offline or GitHub not reachable"; continue; fi
+		up=$(upstream "$dir")
+		behind=$(git -C "$dir" rev-list --count "HEAD..$up" 2>/dev/null || echo 0)
+		[ $name = lunaris ] && desk_b=$behind || dwm_b=$behind
+		total=$((total + behind))
+	done
+	cur=$(version_at HEAD)
+	latest=$(version_at "$(upstream "$LUNARIS_DIR")")
+	# what's new: the changelog sections above the installed version (from the newer CHANGELOG.md)
+	: > "$NOTES"
+	if (( total > 0 )) && isrepo "$LUNARIS_DIR"; then
+		git -C "$LUNARIS_DIR" show "$(upstream "$LUNARIS_DIR"):CHANGELOG.md" 2>/dev/null |
+			awk -v cur="${cur:-none}" '
+				/^## \[/ { v=$2; gsub(/[\[\]]/, "", v); if (v == cur) exit; on=1 }
+				on' > "$NOTES"
+		title=$(sed -n '1s/^## \[[^]]*\] — [^·]*· *//p' "$NOTES")
+	fi
+	{
+		echo "checked=$(date +%s)"
+		echo "current=${cur:-?}"
+		echo "latest=${latest:-${cur:-?}}"
+		echo "title=$title"
+		echo "available=$(( total > 0 ? 1 : 0 ))"
+		echo "commits=$total"
+		echo "lunaris_behind=$desk_b"
+		echo "dwm_behind=$dwm_b"
+		echo "error=$err"
+	} > "$STATE"
+	if (( notify && total > 0 )); then
+		( act=$(notify-send -a Lunaris -i system-software-update -t 0 \
+			-A update="Update now" -A later="Later" \
+			"Lunaris update available" \
+			"v${latest:-?}${title:+ — $title}. Sidebar → ⚙ Settings → Updates shows what's new." 2>/dev/null)
+		  [ "$act" = update ] && "$0" gui ) &
+	fi
+	cat "$STATE"
+}
+
+# ---------------------------------------------------------------- apply helpers
+# manifest.txt: paths (relative to $HOME) that install.sh deploys; a directory covers everything below it
+in_manifest() {
+	local rel=$1 p
+	while read -r p; do
+		[[ -z $p || $p == \#* ]] && continue
+		[[ $rel == "$p" || $rel == "$p"/* ]] && return 0
+	done < "$LUNARIS_DIR/manifest.txt"
+	return 1
+}
+# same rules as install.sh put_file: @HOME@ substituted, a different existing file is backed up
+deploy() {
+	local src=$1 dst=$2 tmp
+	if [ -L "$dst" ] && [ "$(readlink -f "$dst")" = "$(readlink -f "$src")" ]; then
+		info "${dst/#$HOME/\~} (linked, already up to date)"; return
+	fi
+	tmp=$(mktemp); sed "s|@HOME@|$HOME|g" "$src" > "$tmp"
+	if [ -f "$dst" ] && cmp -s "$tmp" "$dst"; then rm -f "$tmp"; return; fi
+	if [ -e "$dst" ] || [ -L "$dst" ]; then run mv "$dst" "$dst.bak-$STAMP"; info "backup: ${dst/#$HOME/\~}.bak-$STAMP"; fi
+	run mkdir -p "$(dirname "$dst")"
+	if (( DRY )); then info "[dry] install ${dst/#$HOME/\~}"; rm -f "$tmp"; return; fi
+	install -m "$(stat -c %a "$src")" "$tmp" "$dst"; rm -f "$tmp"
+	info "updated ${dst/#$HOME/\~}"
+}
+
+apply() {
+	[ "${1:-}" = --dry-run ] && DRY=1
+	local d old_l new_l old_d new_d f rel rebuild=0 sysfiles="" kbd
+	say "Checking for updates"
+	check >/dev/null
+	if [ -n "$(state_get error)" ]; then warn "$(state_get error)"; fi
+	if [ "$(state_get available)" != 1 ]; then
+		printf '%sLunaris %s is up to date.%s\n' "$c_green" "$(state_get current)" "$c_off"; return 0
+	fi
+	for d in "$LUNARIS_DIR" "$DWM_DIR"; do
+		if dirty "$d"; then
+			printf '%sStopped: %s has local changes.%s\n' "$c_red" "${d/#$HOME/\~}" "$c_off"
+			info "Commit or stash them first (git -C ${d/#$HOME/\~} status), then update again."
+			return 1
+		fi
+	done
+	printf '%sLunaris %s → %s%s\n\n' "$c_blue" "$(state_get current)" "$(state_get latest)" "$c_off"
+	[ -s "$NOTES" ] && { sed 's/^/    /' "$NOTES" | head -60; echo; }
+
+	old_l=$(git -C "$LUNARIS_DIR" rev-parse HEAD); old_d=$(git -C "$DWM_DIR" rev-parse HEAD)
+	say "Downloading"
+	if (( DRY )); then
+		new_l=$(git -C "$LUNARIS_DIR" rev-parse "$(upstream "$LUNARIS_DIR")")
+		new_d=$(git -C "$DWM_DIR" rev-parse "$(upstream "$DWM_DIR")")
+		info "[dry] git pull --ff-only (both repos)"
+	else
+		git -C "$LUNARIS_DIR" pull --ff-only --quiet || { warn "could not update ${LUNARIS_DIR/#$HOME/\~}"; return 1; }
+		git -C "$DWM_DIR" pull --ff-only --quiet || { warn "could not update ${DWM_DIR/#$HOME/\~}"; return 1; }
+		new_l=$(git -C "$LUNARIS_DIR" rev-parse HEAD); new_d=$(git -C "$DWM_DIR" rev-parse HEAD)
+	fi
+
+	say "Configs"
+	while IFS= read -r f; do
+		rel=${f#home/}
+		[ -f "$LUNARIS_DIR/$f" ] || continue
+		(( DRY )) && continue   # not pulled in a dry run: listed below instead
+		in_manifest "$rel" && deploy "$LUNARIS_DIR/$f" "$HOME/$rel"
+	done < <(git -C "$LUNARIS_DIR" diff --name-only "$old_l" "$new_l" -- home/)
+	if (( DRY )); then
+		# in a dry run the files are not pulled yet: show which ones would be deployed
+		git -C "$LUNARIS_DIR" diff --name-only "$old_l" "$new_l" -- home/ | sed 's|^home/|    [dry] would update ~/|'
+	fi
+	git -C "$LUNARIS_DIR" diff --name-only "$old_l" "$new_l" -- home/.config/systemd | grep -q . &&
+		run systemctl --user daemon-reload
+	git -C "$LUNARIS_DIR" diff --name-only "$old_l" "$new_l" -- home/.config/dunst | grep -q . &&
+		{ run dunstctl reload 2>/dev/null || true; }
+	sysfiles=$(git -C "$LUNARIS_DIR" diff --name-only "$old_l" "$new_l" -- system/ packages/ sddm/)
+
+	say "dwm and its scripts"
+	git -C "$DWM_DIR" diff --name-only "$old_d" "$new_d" | grep -qE '\.(c|h)$|^config\.mk$|^Makefile$' && rebuild=1
+	for f in "$DWM_DIR"/scripts/*; do
+		[ -f "$f" ] && [ -x "$f" ] || continue
+		[ "$(readlink -f "$HOME/.local/bin/$(basename "$f")" 2>/dev/null)" = "$(readlink -f "$f")" ] && continue
+		run ln -sfn "$f" "$HOME/.local/bin/$(basename "$f")"; info "new command: $(basename "$f")"
+	done
+	if git -C "$DWM_DIR" diff --name-only "$old_d" "$new_d" | grep -qx scripts/xkb-group.c; then
+		run cc -O2 -o "$HOME/.local/bin/xkb-group" "$DWM_DIR/scripts/xkb-group.c" -lX11
+	fi
+	if (( rebuild )); then
+		kbd=$(dwm-keyboard get profile 2>/dev/null || echo azerty)
+		info "dwm changed: rebuilding (keyboard: $kbd) — sudo asks for your password to install it"
+		if (( DRY )); then info "[dry] make KEYBOARD=$kbd && sudo make install && dwm-dev restart"
+		else
+			( cd "$DWM_DIR" && make clean >/dev/null && make KEYBOARD="$kbd" >/dev/null && sudo make install >/dev/null ) ||
+				{ warn "dwm build failed — the old dwm keeps running"; return 1; }
+			dwm-dev restart >/dev/null 2>&1
+			info "dwm restarted in place (your windows stay)"
+		fi
+	else
+		info "no rebuild needed"
+	fi
+
+	if [ -n "$sysfiles" ]; then
+		say "System files / packages changed"
+		printf '%s\n' "$sysfiles" | sed 's/^/    /'
+		if (( ! DRY )) && [ -t 0 ]; then
+			read -r -p "    Run the installer now to apply them (asks for your password)? [y/N] " a
+			[[ $a == [yY]* ]] && ( cd "$LUNARIS_DIR" && ./install.sh --no-apps )
+		else
+			info "apply them with: cd ${LUNARIS_DIR/#$HOME/\~} && ./install.sh"
+		fi
+	fi
+
+	(( DRY )) && { printf '\n%sDry run: nothing was changed.%s\n' "$c_yel" "$c_off"; return 0; }
+	check >/dev/null
+	dwm-ctl refresh >/dev/null 2>&1
+	printf '\n%sLunaris is now %s.%s\n' "$c_green" "$(state_get current)" "$c_off"
+	note -i system-software-update "Lunaris updated" "Now $(state_get current). The sidebar reloads by itself."
+}
+
+# ---------------------------------------------------------------- timer
+timer() {
+	local unit=lunaris-update.timer
+	case ${1:-status} in
+		on)  systemctl --user enable --now "$unit" >/dev/null 2>&1 ;;
+		off) systemctl --user disable --now "$unit" >/dev/null 2>&1 ;;
+	esac
+	if systemctl --user is-enabled "$unit" >/dev/null 2>&1; then
+		echo "timer=1"
+		systemctl --user show "$unit" -p NextElapseUSecRealtime --value 2>/dev/null | sed 's/^/next=/'
+	else
+		echo "timer=0"
+	fi
+}
+
+case ${1:-status} in
+	status) [ -r "$STATE" ] && cat "$STATE" || echo "checked=0"; timer status ;;
+	check)  check "${2:-}" ;;
+	notes)  cat "$NOTES" 2>/dev/null ;;
+	apply)  apply "${2:-}" ;;
+	gui)    exec kitty --class lunaris-update --title "Lunaris update" sh -c \
+	            "'$0' apply; printf '\nPress Enter to close.'; read _" ;;
+	timer)  timer "${2:-status}" ;;
+	*)      sed -n '2,18p' "$0" >&2; exit 1 ;;
+esac

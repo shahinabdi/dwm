@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dwm-keyboard — keyboard profile of dwm-btw (which keys the workspace / screen shortcuts use).
+# dwm-keyboard — keyboard profile of Lunaris (which keys the workspace / screen shortcuts use).
 #
 #   dwm-keyboard                 show the profile and layouts
 #   dwm-keyboard get profile     azerty | qwerty
@@ -11,7 +11,7 @@
 # Config: ~/.config/dwm-btw.conf
 #   KEYBOARD=azerty        azerty: Mod + & é " ' ( - è _ ç à   ·  qwerty: Mod + 1 … 9 0
 #   LAYOUTS=fr,ir          xkb layouts, Mod+Space cycles through them
-# No config = azerty with fr,ir (the original dwm-btw setup).
+# No config = azerty with fr,ir (the original Lunaris setup).
 
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}/dwm-btw.conf"
 KEYBOARD=azerty
@@ -30,7 +30,7 @@ case $1 in
 		lay=${3:-}
 		[ -z "$lay" ] && { [ "$2" = qwerty ] && lay=us,ir || lay=fr,ir; }
 		mkdir -p "$(dirname "$CONF")"
-		printf '# dwm-btw keyboard profile (dwm-keyboard)\nKEYBOARD=%s\nLAYOUTS=%s\n' "$2" "$lay" > "$CONF"
+		printf '# Lunaris keyboard profile (dwm-keyboard)\nKEYBOARD=%s\nLAYOUTS=%s\n' "$2" "$lay" > "$CONF"
 		echo "saved: KEYBOARD=$2 LAYOUTS=$lay"
 		setxkbmap -layout "$lay" 2>/dev/null
 		[ -n "$DISPLAY" ] && command -v dwm-dev >/dev/null && exec dwm-dev build ;;

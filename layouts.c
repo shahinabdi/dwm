@@ -1,4 +1,4 @@
-/* layouts.c — extra layouts for dwm-btw (included from config.h).
+/* layouts.c — extra layouts for Lunaris (included from config.h).
  * Ported from the suckless patches:
  *   bottomstack    https://dwm.suckless.org/patches/bottomstack/
  *   centeredmaster https://dwm.suckless.org/patches/centeredmaster/

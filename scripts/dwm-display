@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dwm-display — scaling, font size and resolution (Omarchy-style) for dwm-btw on X11.
+# dwm-display — scaling, font size and resolution (Omarchy-style) for Lunaris on X11.
 #
 #   dwm-display scale 100|125|150|175|200   scale the WHOLE screen now (xrandr; bar, apps, menus)
 #   dwm-display font +|-|<size>             font size everywhere: kitty, GTK (live), Qt, rofi, notifications

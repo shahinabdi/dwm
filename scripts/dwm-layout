@@ -15,7 +15,7 @@
 #   dwm-layout list               name, symbol, keys and description of every layout
 #   dwm-layout menu               rofi menu with descriptions          (Mod+Shift+l)
 #
-# Talks to dwm through two root-window properties added by the dwm-btw patch:
+# Talks to dwm through two root-window properties added by the Lunaris patch:
 #   _DWM_CMD   (we write a command)  ·  _DWM_STATE (dwm writes its state after every change)
 
 # index ~ name ~ symbol ~ keys ~ description   — order must match layouts[] in config.h

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dwm-bt — Bluetooth for dwm-btw (bluez / bluetoothctl), used by the Quickshell sidebar.
+# dwm-bt — Bluetooth for Lunaris (bluez / bluetoothctl), used by the Quickshell sidebar.
 #
 #   dwm-bt status            power=1|0, scanning=1|0, then one line per device:
 #                            dev|<MAC>|<name>|<paired 1/0>|<connected 1/0>|<icon>|<battery % or empty>

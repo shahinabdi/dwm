@@ -38,7 +38,7 @@ def dwm_dir():
                 return os.path.expanduser(m.group(1).strip("'\""))
     except OSError:
         pass
-    return os.path.join(HOME, "dwm-btw")
+    return os.path.join(HOME, "lunaris-dwm")
 
 
 def c_string(s):
@@ -102,7 +102,7 @@ def clean(v):
 
 def write(icons, rules):
     os.makedirs(os.path.dirname(CONF), exist_ok=True)
-    out = ["# dwm-btw workspaces — edited from the sidebar (Super+A → ⚙ → Workspaces) or by hand.",
+    out = ["# Lunaris workspaces — edited from the sidebar (Super+A → ⚙ → Workspaces) or by hand.",
            "# dwm reads this when it starts or restarts in place (dwm-workspaces apply).",
            "#   icon <1-10> <text or Nerd Font glyph>   (glyphs: https://www.nerdfonts.com/cheat-sheet)",
            "#   rule <class>|<instance>|<title>|<workspace 1-10, 0 = current>|<floating 0/1>|<follow 0/1>",

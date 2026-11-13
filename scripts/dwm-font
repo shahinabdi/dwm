@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dwm-font — Nerd Fonts for dwm-btw: browse the online catalogue, install / remove,
+# dwm-font — Nerd Fonts for Lunaris: browse the online catalogue, install / remove,
 # and choose the font for the interface, the terminal (kitty) and the dwm bar.
 #
 #   dwm-font catalogue [--refresh]   every Nerd Font of the latest release: name|installed(1/0)|ours(1/0)|sizeMB

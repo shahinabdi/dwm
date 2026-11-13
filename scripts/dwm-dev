@@ -20,7 +20,7 @@ valid() { [ -f "$1/dwm.c" ] && [ -f "$1/Makefile" ]; }
 
 set_path() {
 	local guess p
-	guess=${DWM_DIR:-$HOME/dwm-btw}
+	guess=${DWM_DIR:-$HOME/lunaris-dwm}
 	p=$(printf '%s\n' "$guess" | rofi -dmenu -p "dwm source folder" \
 		-mesg "Folder that contains dwm.c, config.h and Makefile (type a path, Enter to save)") || return 1
 	p=${p/#\~/$HOME}; p=${p%/}

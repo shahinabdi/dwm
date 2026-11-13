@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""dwm-notif — saved notifications for dwm-btw (dunst + the Quickshell sidebar + the bar).
+"""dwm-notif — saved notifications for Lunaris (dunst + the Quickshell sidebar + the bar).
 
   dwm-notif                 (run by dunst for every notification) save it
   dwm-notif list            saved notifications as JSON, newest first
@@ -38,7 +38,7 @@ SILENT_RULES = """# written by dwm-notif: silent mode (no pop-ups, still saved; 
     msg_urgency = critical
     skip_display = false
 """
-# dwm-btw's own short feedback (OSD-like): not worth keeping
+# Lunaris's own short feedback (OSD-like): not worth keeping
 NOISE_TAGS = {"dwm-osd", "dwm-kb", "dwm-layout", "dwm-display", "dwm-font", "dwm-wall",
               "dwm-profile", "dwm-color", "dwm-dev", "dwm-monitor", "dwm-cal", "dwm-quick"}
 COMMANDS = {"list", "status", "rm", "clear", "seen", "silent"}
