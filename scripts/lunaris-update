@@ -198,6 +198,13 @@ apply() {
 		info "no rebuild needed"
 	fi
 
+	# small setup steps that install.sh does, for installs that only update
+	say "Settings"
+	if command -v dwm-term >/dev/null; then run dwm-term setup; info "default terminal: $(dwm-term get)"; fi
+	if command -v thunar >/dev/null && [ "$(xdg-mime query default inode/directory 2>/dev/null)" != thunar.desktop ]; then
+		run xdg-mime default thunar.desktop inode/directory; info "folders open in Thunar"
+	fi
+
 	if [ -n "$sysfiles" ]; then
 		say "System files / packages changed"
 		printf '%s\n' "$sysfiles" | sed 's/^/    /'
@@ -236,7 +243,7 @@ case ${1:-status} in
 	check)  check "${2:-}" ;;
 	notes)  cat "$NOTES" 2>/dev/null ;;
 	apply)  apply "${2:-}" ;;
-	gui)    exec kitty --class lunaris-update --title "Lunaris update" sh -c \
+	gui)    exec dwm-term --class lunaris-update --title "Lunaris update" -e sh -c \
 	            "'$0' apply; printf '\nPress Enter to close.'; read _" ;;
 	timer)  timer "${2:-status}" ;;
 	*)      sed -n '2,18p' "$0" >&2; exit 1 ;;

@@ -2,6 +2,7 @@
 # dwm-power — lock / suspend / logout / reboot / shutdown for dwm-btw.
 #   dwm-power lock|suspend|logout|reboot|shutdown
 #   dwm-power menu       rofi menu (asks before logout/reboot/shutdown)   (Mod+Escape)
+#   dwm-power quit       ask, then log out (quit dwm)                      (Mod+Shift+q)
 
 lock() {
 	pgrep -x i3lock >/dev/null && return
@@ -18,9 +19,19 @@ act() {
 		logout)   pkill -x dwm ;;
 		reboot)   systemctl reboot ;;
 		shutdown) systemctl poweroff ;;
-		*) echo "usage: dwm-power {lock|suspend|logout|reboot|shutdown|menu}" >&2; exit 1 ;;
+		*) echo "usage: dwm-power {lock|suspend|logout|reboot|shutdown|menu|quit}" >&2; exit 1 ;;
 	esac
 }
+
+# Mod+Shift+q: quitting dwm closes every app, so ask first (Cancel is the default; Escape cancels)
+if [ "$1" = quit ]; then
+	n=$(xprop -root _NET_CLIENT_LIST 2>/dev/null | grep -o '0x[0-9a-f]*' | wc -l)
+	ans=$(printf '%s\n' "󰜺  Cancel" "󰍃  Log out" | rofi -dmenu -i -no-custom -p "󰍃 log out" \
+		-mesg "Log out of Lunaris? $( [ "${n:-0}" = 1 ] && echo "Your open window" || echo "All ${n:-} open windows" ) will be closed." \
+		-theme-str 'window { width: 420px; } listview { lines: 2; }') || exit 0
+	[[ $ans == *"Log out" ]] && act logout
+	exit 0
+fi
 
 if [ "$1" = menu ]; then
 	opts=("󰌾  Lock" "󰤄  Suspend" "󰍃  Log out" "󰜉  Reboot" "󰐥  Shut down")

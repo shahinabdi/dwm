@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# dwm-term — the default terminal of Lunaris (Mod+Return, terminal apps from the launcher, $TERMINAL,
+# Thunar "Open Terminal Here", and Lunaris's own windows: rebuild, update, nmtui…).
+#
+#   dwm-term [--class C] [--title T] [--dir D] [-e cmd args…]   open the default terminal
+#   dwm-term get                     the default terminal (kitty if not set)
+#   dwm-term list                    name|installed 1/0|current 1/0|label   (known terminals)
+#   dwm-term set <name>              make it the default; the workspace rule of the old one moves to it
+#
+# Saved as TERMINAL=<name> in ~/.config/lunaris.conf. Options are translated for each terminal, so
+# scripts can always call `dwm-term --class X --title Y -e cmd` whatever terminal is chosen.
+
+CONF="$HOME/.config/lunaris.conf"
+KNOWN=(kitty alacritty ghostty wezterm st xterm urxvt xfce4-terminal konsole gnome-terminal)
+declare -A LABEL=([kitty]="kitty" [alacritty]="Alacritty" [ghostty]="Ghostty" [wezterm]="WezTerm" [st]="st (suckless)"
+                  [xterm]="xterm" [urxvt]="urxvt" [xfce4-terminal]="Xfce Terminal" [konsole]="Konsole"
+                  [gnome-terminal]="GNOME Terminal")
+# window class each one uses by default (for the workspace rules)
+declare -A CLASS=([kitty]="kitty" [alacritty]="Alacritty" [ghostty]="com.mitchellh.ghostty" [wezterm]="org.wezfurlong.wezterm"
+                  [st]="st-256color" [xterm]="XTerm" [urxvt]="URxvt" [xfce4-terminal]="Xfce4-terminal"
+                  [konsole]="konsole" [gnome-terminal]="Gnome-terminal")
+
+current() {
+	local t=""
+	[ -r "$CONF" ] && t=$(sed -n 's/^TERMINAL=//p' "$CONF" | tail -1 | tr -d "\"'")
+	[ -n "$t" ] && command -v "$t" >/dev/null && { echo "$t"; return; }
+	for t in kitty "${KNOWN[@]}"; do command -v "$t" >/dev/null && { echo "$t"; return; }; done
+	echo xterm
+}
+
+conf_set() { # conf_set KEY VALUE — keep the other lines of lunaris.conf
+	mkdir -p "$(dirname "$CONF")"; touch "$CONF"
+	if grep -q "^$1=" "$CONF"; then sed -i "s|^$1=.*|$1=$2|" "$CONF"; else echo "$1=$2" >> "$CONF"; fi
+}
+
+run() {
+	local cls="" title="" dir="" t; local -a cmd=()
+	while (( $# )); do
+		case $1 in
+			--class) cls=$2; shift 2 ;;
+			--title) title=$2; shift 2 ;;
+			--dir|--directory) dir=$2; shift 2 ;;
+			-e) shift; cmd=("$@"); break ;;
+			*) cmd=("$@"); break ;;
+		esac
+	done
+	[ -n "$dir" ] && { cd "$dir" 2>/dev/null || true; }   # the terminal (and its shell) starts there
+	t=$(current)
+	local -a a=()
+	case $t in
+		kitty)          a=(kitty ${cls:+--class "$cls"} ${title:+--title "$title"}); ((${#cmd[@]})) && a+=("${cmd[@]}") ;;
+		alacritty)      a=(alacritty ${cls:+--class "$cls"} ${title:+--title "$title"}); ((${#cmd[@]})) && a+=(-e "${cmd[@]}") ;;
+		ghostty)        a=(ghostty ${cls:+--class="$cls"} ${title:+--title="$title"}); ((${#cmd[@]})) && a+=(-e "${cmd[@]}") ;;
+		wezterm)        a=(wezterm start ${cls:+--class "$cls"}); ((${#cmd[@]})) && a+=(-- "${cmd[@]}") ;;
+		st)             a=(st ${cls:+-c "$cls"} ${title:+-t "$title"}); ((${#cmd[@]})) && a+=(-e "${cmd[@]}") ;;
+		xterm|urxvt)    a=("$t" ${cls:+-name "$cls"} ${title:+-title "$title"}); ((${#cmd[@]})) && a+=(-e "${cmd[@]}") ;;
+		xfce4-terminal) a=(xfce4-terminal ${title:+--title "$title"}); ((${#cmd[@]})) && a+=(-x "${cmd[@]}") ;;
+		konsole)        a=(konsole); ((${#cmd[@]})) && a+=(-e "${cmd[@]}") ;;
+		gnome-terminal) a=(gnome-terminal ${title:+--title "$title"}); ((${#cmd[@]})) && a+=(-- "${cmd[@]}") ;;
+		*)              a=("$t"); ((${#cmd[@]})) && a+=(-e "${cmd[@]}") ;;
+	esac
+	exec "${a[@]}"
+}
+
+# the workspace rule that sent the old terminal somewhere now sends the new one there
+move_rule() {
+	local old=${CLASS[$1]:-$1} new=${CLASS[$2]:-$2}
+	command -v dwm-workspaces >/dev/null || return 0
+	python3 - "$old" "$new" <<'EOF'
+import json, subprocess, sys
+old, new = sys.argv[1], sys.argv[2]
+d = json.loads(subprocess.run(["dwm-workspaces", "get"], capture_output=True, text=True).stdout or "{}")
+rules = d.get("rules", [])
+changed = False
+for r in rules:
+    if r.get("class", "").lstrip("=").lower() == old.lower():
+        r["class"] = new; changed = True
+if changed and d.get("supported", True):
+    subprocess.run(["dwm-workspaces", "save", json.dumps({"icons": d["icons"], "rules": rules})])
+    print("workspace rule: %s -> %s" % (old, new))
+EOF
+}
+
+# Thunar "Open Terminal Here" (the stock action needs Xfce helpers that are not installed)
+thunar_action() {
+	local f="$HOME/.config/Thunar/uca.xml"
+	[ -f "$f" ] && sed -i 's|exo-open --working-directory %f --launch TerminalEmulator|dwm-term --dir %f|' "$f"
+}
+
+# rofi runs terminal apps (htop, vim…) with "{terminal} -e {cmd}"
+rofi_terminal() {
+	local f="$HOME/.config/rofi/config.rasi"
+	[ -f "$f" ] || return 0
+	if grep -q '^\s*terminal:' "$f"; then sed -i 's|^\(\s*\)terminal:.*|\1terminal:            "dwm-term";|' "$f"
+	else sed -i '0,/^configuration {/s||configuration {\n    terminal:            "dwm-term";   /* default terminal: dwm-term (Settings → Terminal) */|' "$f"; fi
+}
+
+case ${1:-} in
+	get)  current ;;
+	list)
+		cur=$(current)
+		for t in "${KNOWN[@]}"; do
+			command -v "$t" >/dev/null && i=1 || i=0
+			[ "$t" = "$cur" ] && c=1 || c=0
+			echo "$t|$i|$c|${LABEL[$t]}"
+		done ;;
+	set)
+		t=${2:-}
+		[[ " ${KNOWN[*]} " == *" $t "* ]] || { echo "unknown terminal: $t (${KNOWN[*]})" >&2; exit 1; }
+		command -v "$t" >/dev/null || { echo "$t is not installed" >&2; exit 1; }
+		old=$(current)
+		conf_set TERMINAL "$t"
+		rofi_terminal; thunar_action
+		[ "$old" != "$t" ] && move_rule "$old" "$t"
+		notify-send -t 2500 -h string:x-dunst-stack-tag:dwm-term "Terminal" "Default terminal: ${LABEL[$t]}" 2>/dev/null
+		echo "$t" ;;
+	setup) rofi_terminal; thunar_action ;;   # used by install.sh
+	-h|--help) sed -n '2,12p' "$0" ;;
+	*) run "$@" ;;
+esac

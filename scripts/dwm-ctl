@@ -27,7 +27,7 @@ net_menu() {
 		rofi -dmenu -i -p "Wi-Fi" -format i) || return
 	case $idx in
 		0) if [ "$(nmcli radio wifi)" = enabled ]; then nmcli radio wifi off; else nmcli radio wifi on; fi ;;
-		1) kitty --class nmtui -e nmtui & ;;
+		1) dwm-term --class nmtui -e nmtui & ;;
 		*) ssid=${ssids[idx-2]}
 		   if nmcli -t -f NAME connection show | grep -Fxq -- "$ssid"; then
 			   nmcli connection up id "$ssid"

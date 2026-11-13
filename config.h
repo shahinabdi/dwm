@@ -71,7 +71,7 @@ static const Layout layouts[] = {
 /* commands */
 static char dmenumon[2] = "0";
 static const char *dmenucmd[] = { "dmenu_run", "-m", dmenumon, "-fn", dmenufont, "-nb", col_navy1, "-nf", col_muted, "-sb", col_steel, "-sf", col_text, NULL };
-static const char *termcmd[]  = { "kitty", NULL };
+static const char *termcmd[]  = { "dwm-term", NULL };   /* default terminal: Settings → Terminal (dwm-term set …) */
 static const char *rofi[] = { "rofi", "-show", "drun", "-show-icons", NULL };
 
 /* statuscmd: clicking a status block runs `statusclickcmd <block-id>` with $BUTTON set */
@@ -154,7 +154,7 @@ static const Key keys[] = {
 	TAGKEYS(                        TK8,                      7)
 	TAGKEYS(                        TK9,                      8)
 	TAGKEYS(                        TK10,                      9)
-	{ MODKEY|ShiftMask,             XK_q,      quit,           {0} },
+	{ MODKEY|ShiftMask,             XK_q,      spawn,          SHCMD("dwm-power quit") },   /* asks before logging out */
 	{ MODKEY|ControlMask|ShiftMask, XK_q,      restartwm,      {0} },
 	{ 0,              XF86XK_AudioRaiseVolume,  spawn,         {.v = volup } },
 	{ 0,              XF86XK_AudioLowerVolume,  spawn,         {.v = voldown } },

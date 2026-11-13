@@ -66,7 +66,7 @@ build() {
 		fi
 	else
 		# started from a key / the sidebar: run in a terminal so sudo can ask and errors are visible
-		exec kitty --class dwm-build --title "dwm build" -e "$0" build
+		exec dwm-term --class dwm-build --title "dwm build" -e "$0" build
 	fi
 }
 
@@ -74,7 +74,7 @@ edit() {
 	need_path
 	local f=${1:-config.h}
 	[ -f "$DWM_DIR/$f" ] || f=config.def.h
-	exec kitty --class dwm-edit --title "dwm: $f" --directory "$DWM_DIR" -e ${EDITOR:-vim} "$DWM_DIR/$f"
+	exec dwm-term --class dwm-edit --title "dwm: $f" --dir "$DWM_DIR" -e ${EDITOR:-vim} "$DWM_DIR/$f"
 }
 
 menu() {

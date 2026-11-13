@@ -5,7 +5,7 @@
 
 KEYS='
 #Apps
-Mod + Return|Terminal (kitty)
+Mod + Return|Terminal (default: kitty — Mod + a → ⚙ → Terminal)
 Mod + d|App launcher (rofi)
 Mod + n|Wi-Fi menu
 Mod + v|Clipboard history
@@ -80,7 +80,7 @@ Mod + Shift + x|Lock screen
 Mod + Shift + e|Lock + suspend
 Mod + Escape|Power menu (lock, suspend, log out, reboot, shut down)
 Mod + Shift + d|Display menu (whole-screen scale, font size, resolution)
-Mod + Shift + q|Quit dwm (logout)
+Mod + Shift + q|Log out (quit dwm) — asks first
 Mod + Ctrl + Shift + q|Restart dwm in place (windows stay)
 #Mouse
 Mod + Left drag|Move window

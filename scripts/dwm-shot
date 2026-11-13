@@ -24,7 +24,7 @@ done_shot() {
 			"Screenshot saved" "${FILE/#$HOME/\~}  (copied to clipboard)")
 		case $act in
 			open)   xdg-open "$FILE" ;;
-			folder) thunar --select "$FILE" 2>/dev/null || xdg-open "$DIR" ;;
+			folder) thunar "$DIR" 2>/dev/null || xdg-open "$DIR" ;;
 			delete) rm -f "$FILE"; notify-send -t 1500 -h string:x-dunst-stack-tag:dwm-quick "Screenshot deleted" ;;
 		esac
 	) >/dev/null 2>&1 &
@@ -37,7 +37,7 @@ shot() {
 		window)   maim -u -i "$(xdotool getactivewindow)" "$FILE" ;;
 		delay)    notify-send -t 4500 "Screenshot" "Full screen in 5 seconds…"; maim -u -d 5 "$FILE" ;;
 		annotate) exec flameshot gui --path "$DIR" --clipboard ;;
-		folder)   exec xdg-open "$DIR" ;;
+		folder)   command -v thunar >/dev/null && exec thunar "$DIR"; exec xdg-open "$DIR" ;;
 		*)        echo "usage: dwm-shot {full|region|window|delay|annotate|folder|menu}" >&2; exit 1 ;;
 	esac
 	done_shot

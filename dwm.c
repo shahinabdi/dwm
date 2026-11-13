@@ -191,7 +191,7 @@ static void movemouse(const Arg *arg);
 static Client *nexttiled(Client *c);
 static void pop(Client *c);
 static void propertynotify(XEvent *e);
-static void quit(const Arg *arg);
+static void quit(const Arg *arg) __attribute__((unused));   /* Mod+Shift+q asks first: dwm-power quit */
 static void restartwm(const Arg *arg);
 static void readstrut(Client *c);
 static void cyclelayout(const Arg *arg);
