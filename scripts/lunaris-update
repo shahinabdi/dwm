@@ -101,15 +101,25 @@ in_manifest() {
 	done < "$LUNARIS_DIR/manifest.txt"
 	return 1
 }
-# same rules as install.sh put_file: @HOME@ substituted, a different existing file is backed up
+# same rules as install.sh put_file (@HOME@ substituted); the existing file is backed up only when you
+# changed it (it differs from the previous official version $3:<path>)
 deploy() {
-	local src=$1 dst=$2 tmp
+	local src=$1 dst=$2 oldrev=${3:-} rel=${1#"$LUNARIS_DIR"/} tmp old
 	if [ -L "$dst" ] && [ "$(readlink -f "$dst")" = "$(readlink -f "$src")" ]; then
 		info "${dst/#$HOME/\~} (linked, already up to date)"; return
 	fi
 	tmp=$(mktemp); sed "s|@HOME@|$HOME|g" "$src" > "$tmp"
 	if [ -f "$dst" ] && cmp -s "$tmp" "$dst"; then rm -f "$tmp"; return; fi
-	if [ -e "$dst" ] || [ -L "$dst" ]; then run mv "$dst" "$dst.bak-$STAMP"; info "backup: ${dst/#$HOME/\~}.bak-$STAMP"; fi
+	if [ -e "$dst" ] || [ -L "$dst" ]; then
+		old=$(mktemp)
+		if [ -n "$oldrev" ] && git -C "$LUNARIS_DIR" show "$oldrev:$rel" 2>/dev/null | sed "s|@HOME@|$HOME|g" > "$old" &&
+		   [ -s "$old" ] && cmp -s "$old" "$dst"; then
+			:   # untouched since the last version: just replace it
+		else
+			run mv "$dst" "$dst.bak-$STAMP"; info "your version kept as ${dst/#$HOME/\~}.bak-$STAMP"
+		fi
+		rm -f "$old"
+	fi
 	run mkdir -p "$(dirname "$dst")"
 	if (( DRY )); then info "[dry] install ${dst/#$HOME/\~}"; rm -f "$tmp"; return; fi
 	install -m "$(stat -c %a "$src")" "$tmp" "$dst"; rm -f "$tmp"
@@ -152,7 +162,7 @@ apply() {
 		rel=${f#home/}
 		[ -f "$LUNARIS_DIR/$f" ] || continue
 		(( DRY )) && continue   # not pulled in a dry run: listed below instead
-		in_manifest "$rel" && deploy "$LUNARIS_DIR/$f" "$HOME/$rel"
+		in_manifest "$rel" && deploy "$LUNARIS_DIR/$f" "$HOME/$rel" "$old_l"
 	done < <(git -C "$LUNARIS_DIR" diff --name-only "$old_l" "$new_l" -- home/)
 	if (( DRY )); then
 		# in a dry run the files are not pulled yet: show which ones would be deployed
