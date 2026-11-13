@@ -5,14 +5,15 @@
 #   dwm-bar show|hide|toggle <item>
 #   dwm-bar reset                show everything again
 #
-# items: kb net vol mic bright bat clk   (battery / brightness hide by themselves
+# items: kb net vol mic bright bat clk notif   (battery / brightness hide by themselves
 #        when the machine has none, e.g. a desktop)
 # Saved in ~/.config/dwm-status.conf, read by dwm-status on every update.
 
 CONF="$HOME/.config/dwm-status.conf"
-ITEMS=(kb net vol mic bright bat clk)
+ITEMS=(kb net vol mic bright bat clk notif)
 declare -A LABEL=([kb]="Keyboard layout" [net]="Network" [vol]="Volume" [mic]="Microphone"
-                  [bright]="Brightness" [bat]="Battery" [clk]="Date & time")
+                  [bright]="Brightness" [bat]="Battery" [clk]="Date & time"
+                  [notif]="Notifications")
 
 for it in "${ITEMS[@]}"; do eval "SHOW_$it=1"; done
 [ -r "$CONF" ] && . "$CONF"

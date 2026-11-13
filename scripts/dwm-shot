@@ -25,7 +25,7 @@ done_shot() {
 		case $act in
 			open)   xdg-open "$FILE" ;;
 			folder) thunar --select "$FILE" 2>/dev/null || xdg-open "$DIR" ;;
-			delete) rm -f "$FILE"; notify-send -t 1500 "Screenshot deleted" ;;
+			delete) rm -f "$FILE"; notify-send -t 1500 -h string:x-dunst-stack-tag:dwm-quick "Screenshot deleted" ;;
 		esac
 	) >/dev/null 2>&1 &
 }

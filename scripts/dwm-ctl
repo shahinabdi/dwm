@@ -16,7 +16,7 @@ mic_pct() { wpctl get-volume @DEFAULT_AUDIO_SOURCE@ | awk '{printf "%d", $2*100 
 net_menu() {
 	local -a ssids=() rows=()
 	local inuse sig sec ssid idx pass
-	notify-send -t 1500 "Wi-Fi" "Scanning…" 2>/dev/null
+	notify-send -t 1500 -h string:x-dunst-stack-tag:dwm-quick "Wi-Fi" "Scanning…" 2>/dev/null
 	while IFS=$'\t' read -r inuse sig sec ssid; do
 		ssids+=("$ssid")
 		rows+=("$(printf '%s %3s%%  %s  (%s)' "$([ "$inuse" = '*' ] && echo '󰄬' || echo ' ')" "$sig" "$ssid" "${sec:-open}")")

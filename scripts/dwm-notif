@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""dwm-notif — saved notifications for dwm-btw (dunst + the Quickshell sidebar + the bar).
+
+  dwm-notif                 (run by dunst for every notification) save it
+  dwm-notif list            saved notifications as JSON, newest first
+  dwm-notif status          silent=0|1 count=N unread=N
+  dwm-notif rm <id>         delete one
+  dwm-notif clear           delete all
+  dwm-notif seen            mark all as read (the sidebar does this when it opens)
+  dwm-notif silent on|off|toggle
+                            silent: no pop-ups (critical ones like "battery low" still show),
+                            everything is still saved here
+
+Notifications stay saved until you delete them: ~/.local/share/dwm-btw/notifications.jsonl
+Quick feedback pop-ups (volume, brightness, keyboard layout, layout, wallpaper…) are not saved.
+"""
+import fcntl
+import html
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import time
+
+HOME = os.path.expanduser("~")
+DATA = os.path.join(os.environ.get("XDG_DATA_HOME", HOME + "/.local/share"), "dwm-btw")
+LOG = os.path.join(DATA, "notifications.jsonl")
+SEEN = os.path.join(DATA, "notifications.seen")
+SILENT = os.path.join(os.environ.get("XDG_CONFIG_HOME", HOME + "/.config"),
+                      "dunst", "dunstrc.d", "90-dwm-silent.conf")
+SILENT_RULES = """# written by dwm-notif: silent mode (no pop-ups, still saved; critical ones still show)
+[dwm_silent]
+    appname = "*"
+    skip_display = true
+[dwm_silent_critical]
+    msg_urgency = critical
+    skip_display = false
+"""
+# dwm-btw's own short feedback (OSD-like): not worth keeping
+NOISE_TAGS = {"dwm-osd", "dwm-kb", "dwm-layout", "dwm-display", "dwm-font", "dwm-wall",
+              "dwm-profile", "dwm-color", "dwm-dev", "dwm-monitor", "dwm-cal", "dwm-quick"}
+COMMANDS = {"list", "status", "rm", "clear", "seen", "silent"}
+IMAGE = re.compile(r"\.(png|jpe?g|svg|gif|webp|bmp|xpm)$", re.I)
+
+
+def locked(fn):
+    os.makedirs(DATA, exist_ok=True)
+    with open(LOG + ".lock", "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        return fn()
+
+
+def load():
+    out = []
+    try:
+        with open(LOG, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    out.append(json.loads(line))
+                except ValueError:
+                    pass
+    except FileNotFoundError:
+        pass
+    return out
+
+
+def write(items):
+    tmp = LOG + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        for n in items:
+            f.write(json.dumps(n, ensure_ascii=False) + "\n")
+    os.replace(tmp, LOG)
+
+
+def seen_time():
+    try:
+        return float(open(SEEN).read().strip() or 0)
+    except (OSError, ValueError):
+        return 0.0
+
+
+def refresh_bar():
+    try:
+        pid = int(open(os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "dwm-status.pid")).read())
+        os.kill(pid, signal.SIGUSR1)
+    except (OSError, ValueError):
+        pass
+
+
+def plain(s):
+    s = re.sub(r"<br\s*/?>", "\n", s or "", flags=re.I)
+    s = re.sub(r"<[^>]*>", "", s)
+    return html.unescape(s).strip()
+
+
+def log():
+    e = os.environ
+    if e.get("DUNST_STACK_TAG", "") in NOISE_TAGS:
+        return
+    if e.get("DUNST_PROGRESS", "-1") not in ("", "-1"):      # volume / brightness bars
+        return
+    summary, body = plain(e.get("DUNST_SUMMARY")), plain(e.get("DUNST_BODY"))
+    if not summary and not body:
+        return
+    icon = e.get("DUNST_ICON_PATH", "")
+    if not (icon.startswith("/") and IMAGE.search(icon)):
+        icon = ""
+    app = e.get("DUNST_APP_NAME", "")
+    n = {
+        # dunst runs the script again for shown notifications when it reloads: same key = same one
+        "key": f'{e.get("DUNST_ID", "")}:{e.get("DUNST_TIMESTAMP", "")}',
+        "id": str(time.time_ns()),
+        "time": time.time(),
+        "app": "" if app == "notify-send" else app,
+        "summary": summary,
+        "body": body,
+        "icon": icon,
+        "urgency": e.get("DUNST_URGENCY", "NORMAL").lower(),
+    }
+
+    def add():
+        items = load()
+        if any(x.get("key") == n["key"] for x in items[-50:]):
+            return
+        with open(LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(n, ensure_ascii=False) + "\n")
+    locked(add)
+    refresh_bar()
+
+
+def silent_on():
+    return os.path.exists(SILENT)
+
+
+def set_silent(on):
+    if on:
+        os.makedirs(os.path.dirname(SILENT), exist_ok=True)
+        with open(SILENT, "w") as f:
+            f.write(SILENT_RULES)
+    elif os.path.exists(SILENT):
+        os.remove(SILENT)
+    subprocess.run(["dunstctl", "reload"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    refresh_bar()
+
+
+def main(argv):
+    cmd = argv[1] if len(argv) > 1 else ""
+    # dunst runs us with the notification in the environment (and as arguments: appname summary …)
+    if os.environ.get("DUNST_ID") and cmd not in COMMANDS:
+        return log()
+    if cmd == "list":
+        items = load()
+        seen = seen_time()
+        for n in items:
+            n.pop("key", None)
+            n["unread"] = n.get("time", 0) > seen
+            if n.get("icon") and not os.path.exists(n["icon"]):
+                n["icon"] = ""
+        print(json.dumps(items[::-1], ensure_ascii=False))
+    elif cmd == "status":
+        items = load()
+        seen = seen_time()
+        print(f"silent={int(silent_on())} count={len(items)} "
+              f"unread={sum(1 for n in items if n.get('time', 0) > seen)}")
+    elif cmd == "rm" and len(argv) > 2:
+        locked(lambda: write([n for n in load() if n.get("id") != argv[2]]))
+        refresh_bar()
+    elif cmd == "clear":
+        locked(lambda: write([]))
+        refresh_bar()
+    elif cmd == "seen":
+        os.makedirs(DATA, exist_ok=True)
+        with open(SEEN, "w") as f:
+            f.write(str(time.time()))
+        refresh_bar()
+    elif cmd == "silent" and len(argv) > 2 and argv[2] in ("on", "off", "toggle"):
+        set_silent({"on": True, "off": False}.get(argv[2], not silent_on()))
+    else:
+        sys.stderr.write(__doc__)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv) or 0)

@@ -85,9 +85,18 @@ clk() {
 	printf '\x07\U000F00ED %s  \U000F0150 %s\x07' "$(date '+%a %d %b')" "$(date '+%H:%M')"
 }
 
+notif() {   # saved notifications: cat + unread count, bell-off when silent
+	local st u out=$'\U000F011B'
+	st=$(dwm-notif status 2>/dev/null) || return
+	u=$(sed -n 's/.*unread=\([0-9]*\).*/\1/p' <<<"$st")
+	[[ $st == *silent=1* ]] && out+=$' \U000F009B'
+	[ "${u:-0}" -gt 0 ] && out+=" $u"
+	printf '\x08%s\x08' "$out"
+}
+
 # which items are shown: ~/.config/dwm-status.conf (SHOW_<item>=0 hides it), managed by dwm-bar
 CONF="$HOME/.config/dwm-status.conf"
-ITEMS=(kb net vol mic bright bat clk)
+ITEMS=(kb net vol mic bright bat clk notif)
 
 update() {
 	local out="" part it var

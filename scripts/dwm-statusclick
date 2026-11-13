@@ -18,6 +18,9 @@ case "$1:$BUTTON" in
 	5:4) dwm-ctl bright-up ;;                              # brightness
 	5:5) dwm-ctl bright-down ;;
 	6:*) d=$(ls -d /sys/class/power_supply/BAT* 2>/dev/null | head -1)   # battery details
-	     notify-send "Battery" "$(cat $d/status), $(cat $d/capacity)%" ;;
-	7:1) notify-send "$(date '+%B %Y')" "<tt>$(cal | tail -n +2)</tt>" ;;  # calendar
+	     notify-send -h string:x-dunst-stack-tag:dwm-quick "Battery" "$(cat $d/status), $(cat $d/capacity)%" ;;
+	7:1) notify-send -h string:x-dunst-stack-tag:dwm-cal "$(date '+%B %Y')" "<tt>$(cal | tail -n +2)</tt>" ;;  # calendar
+	8:1) qs -c arch-sidebar ipc call sidebar open >/dev/null ;;   # notifications: open the list
+	8:2) dwm-notif clear ;;                                # clear all
+	8:3) dwm-notif silent toggle ;;                        # silent on / off
 esac
