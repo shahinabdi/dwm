@@ -104,3 +104,7 @@ tags.h / rules.h are the defaults. Change them without rebuilding from the sideb
     rule <class>|<instance>|<title>|<workspace, 0 = any>|<floating 0/1>|<follow 0/1>
 
 Delete the file (or "Reset to defaults") to go back to tags.h / rules.h.
+
+Changelog
+---------
+See CHANGELOG.md (same file in both repos, current version 0.6.0).
