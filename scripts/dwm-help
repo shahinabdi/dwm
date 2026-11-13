@@ -133,10 +133,10 @@ while IFS='|' read -r key desc; do
 	if [[ $key == \#* ]]; then
 		printf '<span foreground="#7aa2f7" weight="bold">── %s ──</span>\n' "$(esc "${key#\#}")"
 	else
-		printf '<b>%s</b>  <span foreground="#7d90ab">%s</span>\n' \
+		printf '<b>%s</b>  <span alpha="70%%">%s</span>\n' \
 			"$(esc "$(pad "$key")")" "$(esc "$desc")"
 	fi
 done <<<"$KEYS" |
 	rofi -dmenu -i -markup-rows -no-custom -p "󰌌 keys" \
-		-theme-str 'window { width: 760px; } listview { lines: 18; } element-text { font: "JetBrainsMono Nerd Font Mono 11"; }' \
+		-theme-str 'window { width: 760px; } listview { lines: 18; } element-text { font: "JetBrainsMono Nerd Font Mono 11"; } element selected.normal, element selected.active { background-color: #3b4261; text-color: #c0caf5; border: 0 0 0 3px; border-color: #7aa2f7; }' \
 		>/dev/null

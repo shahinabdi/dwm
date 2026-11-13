@@ -106,10 +106,10 @@ case $1 in
 		esc() { sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' <<<"$1"; }
 		choice=$(for i in "${!LAYOUTS[@]}"; do
 				mark=$([ "$i" = "$cur" ] && echo '●' || echo ' ')
-				printf '<span foreground="#7aa2f7">%s</span>  <b>%-9s</b> <tt>%-5s</tt>  <span foreground="#565f89" size="small">%s</span>\n' \
+				printf '<span foreground="#7aa2f7">%s</span>  <b>%-9s</b> <tt>%-5s</tt>  <span alpha="60%%" size="small">%s</span>\n' \
 					"$mark" "$(field "$i" 1)" "$(esc "$(field "$i" 2)")" "$(esc "$(field "$i" 4)")"
 			done | rofi -dmenu -i -markup-rows -format i -p "󰕰 layout" \
-				-theme-str 'window { width: 1100px; } listview { lines: 9; } element-text { font: "JetBrainsMono Nerd Font Mono 11"; }') || exit 0
+				-theme-str 'window { width: 1100px; } listview { lines: 9; } element-text { font: "JetBrainsMono Nerd Font Mono 11"; } element selected.normal, element selected.active { background-color: #3b4261; text-color: #c0caf5; border: 0 0 0 3px; border-color: #7aa2f7; }') || exit 0
 		cmd layout "$choice"; announce ;;
 	*) sed -n '2,12p' "$0" >&2; exit 1 ;;
 esac
