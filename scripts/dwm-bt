@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# dwm-bt — Bluetooth for dwm-btw (bluez / bluetoothctl), used by the Quickshell sidebar.
+#
+#   dwm-bt status            power=1|0, scanning=1|0, then one line per device:
+#                            dev|<MAC>|<name>|<paired 1/0>|<connected 1/0>|<icon>|<battery % or empty>
+#   dwm-bt power on|off      (on also lifts a soft rfkill block)
+#   dwm-bt scan [seconds]    look for new devices (default 12 s); they show up in `status`
+#   dwm-bt pair <MAC>        pair + trust + connect (headphones, speakers, mice: no PIN)
+#   dwm-bt connect|disconnect|remove <MAC>
+#
+# Devices that need a PIN / passkey (some keyboards): run `bluetoothctl` in a terminal,
+# `pair <MAC>` and type the code it shows.
+
+bt() { timeout "${T:-8}" bluetoothctl "$@" 2>/dev/null; }
+note() { notify-send -t 2500 -h string:x-dunst-stack-tag:dwm-bt "Bluetooth" "$*" 2>/dev/null; }
+valid() { [[ $1 =~ ^([0-9A-F]{2}:){5}[0-9A-F]{2}$ ]] || { echo "bad address: $1" >&2; exit 1; }; }
+name_of() { bt info "$1" | sed -n 's/^\s*Alias: //p' | head -1; }
+
+status() {
+	local show; show=$(bt show)
+	grep -q 'Powered: yes' <<<"$show" && echo power=1 || echo power=0
+	grep -q 'Discovering: yes' <<<"$show" && echo scanning=1 || echo scanning=0
+	grep -q 'Powered: yes' <<<"$show" || return 0
+	local mac rest info name
+	while read -r _ mac rest; do
+		[[ $mac =~ ^([0-9A-F]{2}:){5}[0-9A-F]{2}$ ]] || continue
+		info=$(T=3 bt info "$mac")
+		name=$(sed -n 's/^\s*Name: //p' <<<"$info" | head -1)
+		local paired=0 conn=0
+		grep -q 'Paired: yes' <<<"$info" && paired=1
+		grep -q 'Connected: yes' <<<"$info" && conn=1
+		# unnamed devices nearby are noise (beacons, phones not in pairing mode): only show named ones
+		[ -z "$name" ] && (( ! paired )) && continue
+		[ -n "$name" ] || name=$(sed -n 's/^\s*Alias: //p' <<<"$info" | head -1)
+		local icon bat
+		icon=$(sed -n 's/^\s*Icon: //p' <<<"$info" | head -1)
+		bat=$(sed -n 's/^\s*Battery Percentage: .*(\([0-9]*\)).*/\1/p' <<<"$info" | head -1)
+		printf 'dev|%s|%s|%s|%s|%s|%s\n' "$mac" "${name//|/ }" "$paired" "$conn" "${icon:-unknown}" "$bat"
+	done < <(bt devices)
+}
+
+case $1 in
+	status) status ;;
+	power)
+		case $2 in
+			on)  rfkill unblock bluetooth 2>/dev/null; sleep 0.3; bt power on >/dev/null && note "On" ;;
+			off) bt power off >/dev/null && note "Off" ;;
+			*) echo "usage: dwm-bt power on|off" >&2; exit 1 ;;
+		esac ;;
+	scan)
+		s=${2:-12}; [[ $s =~ ^[0-9]+$ ]] || s=12
+		bt pairable on >/dev/null
+		T=$((s + 3)) bt --timeout "$s" scan on >/dev/null ;;
+	pair)
+		valid "$2"; n=$(name_of "$2")
+		bt pairable on >/dev/null
+		if T=30 bt --agent NoInputNoOutput --timeout 25 pair "$2" | grep -qiE 'Pairing successful|AlreadyExists'; then
+			bt trust "$2" >/dev/null
+			if T=15 bt connect "$2" | grep -qi 'Connection successful'; then note "Connected: ${n:-$2}"
+			else note "Paired: ${n:-$2} (connect it from the list)"; fi
+		else
+			note "Pairing failed: ${n:-$2}. Put the device in pairing mode and try again (PIN devices: bluetoothctl)."
+			exit 1
+		fi ;;
+	connect)
+		valid "$2"; n=$(name_of "$2")
+		if T=15 bt connect "$2" | grep -qi 'Connection successful'; then note "Connected: ${n:-$2}"
+		else note "Could not connect: ${n:-$2} (is it on and in range?)"; exit 1; fi ;;
+	disconnect)
+		valid "$2"; n=$(name_of "$2"); bt disconnect "$2" >/dev/null; note "Disconnected: ${n:-$2}" ;;
+	remove)
+		valid "$2"; n=$(name_of "$2"); bt remove "$2" >/dev/null; note "Forgot: ${n:-$2}" ;;
+	*) sed -n '2,13p' "$0" >&2; exit 1 ;;
+esac
